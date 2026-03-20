@@ -1,0 +1,78 @@
+# ==========================================
+# 1. C/C++ & STM32 (VS Code + CubeIDE Extension)
+# ==========================================
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.stat
+*.d
+/Debug/
+/Release/
+.settings/
+.project
+.cproject
+.mxproject
+
+# VS Code specific
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# ==========================================
+# 2. Hardware: ALTIUM DESIGNER
+# ==========================================
+# Logs and temporary files
+Project\ Logs\ for*
+*.PcbDoc.htm
+*.SchDoc.htm
+*.History/
+*.CanvasItem*
+*__Preview.SchDoc
+*__Preview.PcbDoc
+
+# Output files (Chỉ nên xuất file cuối cùng, không nên quản lý file tạm)
+Out/
+Generated\ Source/
+
+# ==========================================
+# 3. Hardware: KICAD
+# ==========================================
+# Backup files
+*-bak
+*.bak
+*.kicad_pcb-bak
+*.sch-bak
+
+# Temporary files
+_autosave-*
+*.tmp
+fp-info-cache
+*.lck
+
+# Output (Gerber files, v.v. nên nén riêng thay vì đẩy lên Git liên tục)
+/plots/
+/_autosave-*/
+
+# ==========================================
+# 4. Simulation: LTSPICE
+# ==========================================
+# Waveform data (Rất nặng, không nên đưa lên Git)
+*.raw
+*.net
+*.log
+*.op.raw
+
+# ==========================================
+# 5. OS & General
+# ==========================================
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
