@@ -62,7 +62,7 @@ Mở Terminal trên máy hoặc ngay trong VS Code (`Ctrl + ~`).
 
 **(Lần đầu tiên) Tải dự án & Chọn nhánh:**
 ```bash
-git clone https://github.com/[tên-tài-khoản]/mpx5050-blood-pressure-monitor.git
+git clone https://github.com/phantranthehuy/mpx5050-blood-pressure-monitor.git
 cd mpx5050-blood-pressure-monitor
 git checkout fw-tung  # Thay bằng tên nhánh của bạn
 ```
