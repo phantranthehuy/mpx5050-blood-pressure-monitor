@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 0)
+  (lib (name "Adafruit_ADS1115_16Bit_I2C_ADC-eagle-import")(type "KiCad")(uri "${KIPRJMOD}/Adafruit_ADS1115_16Bit_I2C_ADC-eagle-import.kicad_sym")(options "")(descr ""))
+)
