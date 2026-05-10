@@ -302,4 +302,4 @@ Trong repo firmware, không dùng biến toàn cục `current_sys_state` như v�
 | `LED_SYS_STATE_ERROR` | `STATE_ERROR` (hở khí / I2C…) |
 | `LED_SYS_STATE_EMERGENCY` | `STATE_FAST_DEFLATE` khi **STOP**, **quá áp (280 mmHg)**, hoặc **ABORT** UART |
 
-**API:** `LedHmiSystemState_t bp_fsm_led_hmi_state(void)` trong [`bp_fsm.c`](src/bp_fsm.c); hiển thị không chặn: `led_hmi_task(bp_fsm_led_hmi_state())` trong [`main.c`](src/main.c). Logic nhấp nháy nằm trong [`led_hmi.c`](src/led_hmi.c), chân LED theo schematic **PB13/PB14/PB15** trong [`board_config.h`](include/board_config.h).
+**API:** `LedHmiSystemState_t bp_fsm_led_hmi_state(void)` trong [`bp_fsm.c`](Core/Src/bp_fsm.c); hiển thị không chặn: `led_hmi_task(bp_fsm_led_hmi_state())` trong [`main.c`](Core/Src/main.c). Logic nhấp nháy nằm trong [`led_hmi.c`](Core/Src/led_hmi.c), chân LED theo schematic **PB13/PB14/PB15** trong [`board_config.h`](Core/Inc/board_config.h).

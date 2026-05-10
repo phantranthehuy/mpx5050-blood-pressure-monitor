@@ -1,0 +1,1 @@
+# CMake FetchContent clones stm32f1xx_hal_driver and cmsis_device_f1 here.

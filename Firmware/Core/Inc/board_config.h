@@ -1,5 +1,5 @@
 /**
- * Pin map — điều chỉnh nếu schematic khác Blue Pill tiêu chuẩn.
+ * Pin map — Blue Pill STM32F103C8T6 (hoặc tương đương medium-density).
  * UART1: PA9 TX, PA10 RX | I2C1: PB6 SCL, PB7 SDA | TIM3 PWM: PA6 motor, PA7 valve
  */
 #ifndef BOARD_CONFIG_H
