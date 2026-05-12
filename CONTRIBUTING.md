@@ -95,6 +95,4 @@ Chỉ thực hiện khi bạn đã làm xong một chức năng lớn/hoàn thi�
 
 ---
 
-> **💡 Lưu ý nhỏ (Đặc biệt với Cách 3):** Lệnh `git add .` rất tiện nhưng sẽ gom tất cả rác vào dự án nếu file `.gitignore` thiết lập chưa chuẩn. Hãy đảm bảo file `.gitignore` đã được đẩy lên nhánh `main` trước khi mọi người tải dự án về nhé!
-
 **🚀 Chúc anh em code không bug, mạch không cháy nổ!**

@@ -37,8 +37,8 @@ The core of the system relies on capturing and separating the pressure signals:
 
 ## 🛠 Technology Stack
 - **Microcontroller:** STM32 Series
-- **Firmware Language:** C (STM32 HAL Framework)
-- **Development Environment:** VS Code with STM32CubeIDE Extension
+- **Firmware:** C (STM32 HAL, CMake) trong `firmware/stm32-hal-cmake/`; tùy chọn C/C++ Arduino (STM32duino) trong `firmware/stm32-arduino-pio/`.
+- **Development Environment:** VS Code with STM32CubeIDE Extension (HAL) hoặc VS Code + PlatformIO (Arduino, `firmware/stm32-arduino-pio/`).
 - **Hardware Design:** Altium Designer / KiCad
 - **Simulation Tools:** LTSpice (Analog filtering), Python/MATLAB (Algorithm verification)
 
@@ -47,7 +47,7 @@ The core of the system relies on capturing and separating the pressure signals:
 📦 mpx5050-blood-pressure-monitor
  ┣ 📂 Algorithms      # Python/MATLAB scripts for algorithm simulation & signal filtering
  ┣ 📂 Docs            # Datasheets, academic papers, and technical reports
- ┣ 📂 Firmware        # Embedded C source code, CubeMX (.ioc) config, and drivers
+ ┣ 📂 firmware        # stm32-hal-cmake (CMake+HAL) + stm32-arduino-pio (PlatformIO Arduino)
  ┣ 📂 Hardware        # Schematics, PCB layouts, and Bill of Materials (BOM)
  ┣ 📂 Mechanical      # 3D models and CAD files for the device enclosure
  ┣ 📜 .gitignore      # Ignored files for STM32, VS Code, and EDA tools
@@ -67,11 +67,13 @@ The core of the system relies on capturing and separating the pressure signals:
    ```bash
    git clone https://github.com/your-username/mpx5050-blood-pressure-monitor.git
    ```
-2. **Open the Firmware:**
-   Open the `/Firmware` directory in VS Code.
-3. **Compile:**
+2. **Open the firmware (HAL / CMake):**
+   Open the `firmware/stm32-hal-cmake` directory in VS Code (CMake + STM32 HAL).
+3. **Optional — Arduino framework (same MCU):**
+   Open `firmware/stm32-arduino-pio` in VS Code with the PlatformIO extension, or run `pio run` from that folder (see `firmware/stm32-arduino-pio/README.md`).
+4. **Compile:**
    Press `Ctrl + Shift + B` (or use the STM32 extension build button) to compile the C code and generate the `.elf` / `.hex` files.
-4. **Flash to MCU:**
+5. **Flash to MCU:**
    Connect your ST-Link debugger and click `Run > Start Debugging` (F5) to flash the firmware onto the STM32.
 
 ## ⚖️ License

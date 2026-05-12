@@ -1,0 +1,276 @@
+:root {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.45;
+  color: #e8eaef;
+  background: #12151c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+a {
+  color: #7cb8ff;
+}
+
+#app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2rem;
+}
+
+header.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+header.top h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 650;
+  flex: 1 1 auto;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.badge.idle {
+  background: #1e3d2f;
+  color: #8fe6b8;
+}
+.badge.inflate {
+  background: #3d3518;
+  color: #f0d060;
+}
+.badge.margin {
+  background: #3d3218;
+  color: #ffb347;
+}
+.badge.deflate {
+  background: #2a3218;
+  color: #d4e060;
+}
+.badge.fast {
+  background: #3d1818;
+  color: #ff8a8a;
+}
+.badge.done {
+  background: #1a2e3d;
+  color: #8fd4ff;
+}
+.badge.err {
+  background: #401818;
+  color: #ff9e9e;
+}
+
+.grid-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.card-num {
+  background: #1c212c;
+  border: 1px solid #2a3140;
+  border-radius: 10px;
+  padding: 0.85rem;
+}
+
+.card-num .label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8b93a5;
+}
+
+.card-num .value {
+  font-size: 1.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid #3a4458;
+  background: #252b38;
+  color: #e8eaef;
+  padding: 0.45rem 0.85rem;
+}
+
+button:hover:not(:disabled) {
+  background: #2f3648;
+}
+
+button.primary {
+  background: #2a4d7a;
+  border-color: #3d6aa3;
+}
+
+button.danger {
+  background: #5a2828;
+  border-color: #804040;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+input[type='number'],
+input[type='text'] {
+  font: inherit;
+  width: 5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #3a4458;
+  background: #1c212c;
+  color: #e8eaef;
+}
+
+fieldset.settings {
+  border: 1px solid #2a3140;
+  border-radius: 10px;
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+}
+
+fieldset.settings legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+}
+
+fieldset.settings label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 1rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.chart-caption {
+  margin: 1rem 0 0.35rem;
+  font-weight: 650;
+  font-size: 0.95rem;
+  color: #c6cee0;
+}
+
+.chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  font-size: 0.88rem;
+  color: #a8b0c4;
+}
+
+.chart-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.chart-toolbar input {
+  accent-color: #7cb8ff;
+}
+
+.chart-wrap {
+  background: #1c212c;
+  border: 1px solid #2a3140;
+  border-radius: 10px;
+  padding: 0.5rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+.osc-tag {
+  display: inline-block;
+  margin-right: 0.65rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.osc-tag.sys {
+  background: #3d2528;
+  color: #fca5a5;
+}
+
+.osc-tag.map {
+  background: #3d3420;
+  color: #fcd34d;
+}
+
+.osc-tag.dia {
+  background: #1e3d2f;
+  color: #6ee7b7;
+}
+
+.small-note {
+  font-size: 0.82rem;
+  color: #8b93a5;
+  margin-top: 0.35rem;
+}
+
+.testing-panel {
+  background: #181c24;
+  border: 1px dashed #333946;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-top: 1.5rem;
+}
+
+.testing-panel h2 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.testing-panel ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.88rem;
+  color: #a8b0c4;
+}
+
+.log-box {
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  background: #0d0f14;
+  border: 1px solid #2a3140;
+  border-radius: 8px;
+  padding: 0.5rem;
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #9aa3b5;
+}
