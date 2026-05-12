@@ -176,7 +176,11 @@ void loop(void)
             uart_proto_send_line("A,IDLE\r\n");
     }
 
-    uart_proto_send_sample(g_seq++, now, p_mmhg, rc, counts);
+    uart_proto_send_sample(g_seq++, now, p_mmhg, rc, counts,
+                           (int)stt,
+                           (int)bp_fsm_get_pump_pwm_percent(),
+                           (int)bp_fsm_get_valve_pwm_percent(),
+                           start, stop, high);
 
     apply_pwm_outputs();
     led_hmi_task(bp_fsm_led_hmi_state());
