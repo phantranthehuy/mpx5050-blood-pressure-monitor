@@ -33,10 +33,10 @@ python3 -m platformio device monitor -b 115200
 ## Khác biệt so với bản HAL
 
 - **ADS1115:** driver dùng `Wire` (địa chỉ 7-bit), không dùng `HAL_I2C_*`.
-- **UART:** `Serial` + `uart_proto_poll_rx()` trong vòng lặp (polling), tương đương luồng lệnh `T,...` / `ABORT` như HAL.
+- **UART:** `Serial` + `uart_proto_poll_rx()` trong vòng lặp (polling), tương đương luồng lệnh `T,...` / `ABORT` / `DR,...` / `EARLYEND` khi đã đồng bộ với bản HAL.
 - **100 Hz:** `HardwareTimer` trên **TIM2** (`setOverflow(100, HERTZ_FORMAT)`).
 - **PWM:** `analogWriteFrequency(1000)` (toàn cục trên core STM32duino) + `analogWriteResolution(10)` + `analogWrite` — tương đương duty 0–100 % của HAL.
 
 ## Giao thức host
 
-Giữ nguyên định dạng dòng `S,...`, `A,...`, `E,...` và lệnh `T,<mmHg>` như tài liệu `pc-bridge.md` ở bản HAL.
+Giữ nguyên định dạng dòng `S,...`, `A,...`, `E,...` và lệnh `T,<mmHg>` như tài liệu `pc-bridge.md` ở bản HAL. Thêm: **`DR,<mmHg/s>`** (tốc độ xả chậm đo, clamp theo `DEFLATE_SLOW_RATE_UART_*` trong `board_config.h`, hiện 2.5–10.0 mmHg/s) và **`EARLYEND`** (kết thúc xả chậm sớm → xả nhanh, chỉ trong pha đo). Dòng **`S,...`** đầy đủ kết thúc bằng **`,<dp_centi>`** — `dp_centi = round(dp/dt mmHg/s × 100)` (âm khi áp giảm); WebApp parse thành `dpMmHgPerS`.

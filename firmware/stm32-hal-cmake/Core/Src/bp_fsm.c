@@ -22,9 +22,12 @@ static uint32_t done_since_ms = 0;
 static uint8_t pump_pwm = 0;
 static uint8_t valve_pwm = VALVE_CLOSED_DUTY;
 
-static uint8_t high_mode = 0;
-/** 1 khi vào FAST_DEFLATE do STOP / quá áp / ABORT host → LED_EMERGENCY nhấp nháy nhanh. */
+static uint8_t s_btn_high = 0;
+static uint8_t g_host_high = 0;
+static float g_saf_mmhg = PRESSURE_SAFE_MAX_MMHG;
+static float g_saf_high_mmhg = PRESSURE_SAFE_MAX_MMHG;
 static uint8_t fast_deflate_emergency_led = 0;
+static uint8_t uart_start_req = 0;
 
 static void enter_fast_deflate(uint8_t emergency_led)
 {
@@ -48,8 +51,13 @@ void bp_fsm_init(void)
     valve_pwm = VALVE_CLOSED_DUTY;
     host_target_pending = 0;
     i2c_fail_streak = 0;
-    high_mode = 0;
     fast_deflate_emergency_led = 0;
+    uart_start_req = 0;
+}
+
+void bp_fsm_host_request_uart_start(void)
+{
+    uart_start_req = 1u;
 }
 
 BpState bp_fsm_get_state(void)
@@ -77,9 +85,40 @@ void bp_fsm_sensor_i2c_ok(void)
     i2c_fail_streak = 0;
 }
 
+static float clampf(float x, float lo, float hi)
+{
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
+
+static float effective_safe_cap_mmhg(void)
+{
+    uint8_t hi = ((s_btn_high != 0u) || (g_host_high != 0u)) ? 1u : 0u;
+    return hi ? g_saf_high_mmhg : g_saf_mmhg;
+}
+
+void bp_fsm_host_set_saf_mmhg(float mmhg)
+{
+    mmhg = clampf(mmhg, PRESSURE_SAFE_UART_MIN_MMHG, PRESSURE_SAFE_UART_MAX_MMHG);
+    g_saf_mmhg = mmhg;
+}
+
+void bp_fsm_host_set_saf_high_mmhg(float mmhg)
+{
+    mmhg = clampf(mmhg, PRESSURE_SAFE_UART_MIN_MMHG, PRESSURE_SAFE_UART_MAX_MMHG);
+    g_saf_high_mmhg = mmhg;
+}
+
+void bp_fsm_host_set_high_uart(uint8_t on)
+{
+    g_host_high = on ? 1u : 0u;
+}
+
 void bp_fsm_host_set_target_mmhg(float target_mmhg)
 {
-    if (target_mmhg > PRESSURE_SAFE_MAX_MMHG) target_mmhg = PRESSURE_SAFE_MAX_MMHG;
+    float cap = effective_safe_cap_mmhg();
+    if (target_mmhg > cap) target_mmhg = cap;
     if (target_mmhg < 30.f) target_mmhg = 30.f;
     inflate_target_mmhg = target_mmhg;
     host_target_pending = 1;
@@ -90,17 +129,11 @@ void bp_fsm_host_abort_measure(void)
     enter_fast_deflate(1u);
 }
 
-static float clampf(float x, float lo, float hi)
-{
-    if (x < lo) return lo;
-    if (x > hi) return hi;
-    return x;
-}
-
 void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
                     int start_pressed, int stop_pressed, int high_pressed)
 {
-    high_mode = high_pressed ? 1u : 0u;
+    s_btn_high = high_pressed ? 1u : 0u;
+    const float saf_cap = effective_safe_cap_mmhg();
 
     if (i2c_fail_streak >= BP_I2C_FAIL_THRESH && state != BP_STATE_IDLE &&
         state != BP_STATE_DONE && state != BP_STATE_ERROR) {
@@ -108,14 +141,12 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
         return;
     }
 
-    /* SAF-01 Emergency stop → LED_EMERGENCY */
     if (stop_pressed && state != BP_STATE_IDLE && state != BP_STATE_DONE && state != BP_STATE_ERROR) {
         enter_fast_deflate(1u);
         return;
     }
 
-    /* SAF-02 over-pressure (280 mmHg testcase) */
-    if (pressure_mmhg >= PRESSURE_SAFE_MAX_MMHG) {
+    if (pressure_mmhg >= saf_cap) {
         enter_fast_deflate(1u);
         return;
     }
@@ -137,13 +168,15 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
     case BP_STATE_IDLE:
         pump_pwm = 0;
         valve_pwm = VALVE_CLOSED_DUTY;
-        if (start_pressed) {
+        if (start_pressed || uart_start_req) {
+            uart_start_req = 0;
             state = BP_STATE_INFLATE_SLOW_LISTEN;
             inflate_enter_ms = now_ms;
             pressure_at_inflate_start = pressure_mmhg;
             host_target_pending = 0;
-            float fb = INFLATE_FALLBACK_TARGET_MMHG + (high_mode ? 15.f : 0.f);
-            inflate_target_mmhg = clampf(fb, 40.f, PRESSURE_SAFE_MAX_MMHG - 5.f);
+            float fb = INFLATE_FALLBACK_TARGET_MMHG +
+                       (((s_btn_high != 0u) || (g_host_high != 0u)) ? 15.f : 0.f);
+            inflate_target_mmhg = clampf(fb, 40.f, saf_cap - 5.f);
             pump_pwm = PUMP_PWM_MIN + 10u;
             valve_pwm = VALVE_CLOSED_DUTY;
         }
@@ -152,22 +185,19 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
     case BP_STATE_INFLATE_SLOW_LISTEN: {
         valve_pwm = VALVE_CLOSED_DUTY;
 
-        /* Chờ WebApp gửi T,... → chuyển margin */
         if (host_target_pending) {
             host_target_pending = 0;
             state = BP_STATE_INFLATE_TO_MARGIN;
-            pump_pwm = clampf((float)pump_pwm + 25.f, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
+            pump_pwm = (uint8_t)clampf((float)pump_pwm + 25.f, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
             break;
         }
 
-        /* Fallback: timeout chờ lệnh */
         if ((now_ms - inflate_enter_ms) > INFLATE_FALLBACK_AFTER_MS) {
             state = BP_STATE_INFLATE_TO_MARGIN;
-            pump_pwm = clampf((float)pump_pwm + 20.f, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
+            pump_pwm = (uint8_t)clampf((float)pump_pwm + 20.f, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
             break;
         }
 
-        /* SAF-03 leak: không tăng áp trong LEAK_TIMEOUT_MS */
         if ((now_ms - inflate_enter_ms) > LEAK_TIMEOUT_MS) {
             if (pressure_mmhg < pressure_at_inflate_start + 10.f) {
                 enter_error();
@@ -175,14 +205,12 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
             }
         }
 
-        /* Servo ~TARGET_PRESSURE_RATE_MMHG_S */
         float err = TARGET_PRESSURE_RATE_MMHG_S - dp_dt;
         int adj = (int)(err * 2.f);
         int np = (int)pump_pwm + adj;
         np = (int)clampf((float)np, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
         pump_pwm = (uint8_t)np;
 
-        /* Quá chậm trong thời gian dài → tăng PWM nhẹ */
         if (dp_dt < 2.f && (now_ms - inflate_enter_ms) > 3000u)
             pump_pwm = (uint8_t)clampf((float)pump_pwm + 1.f, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
 
@@ -199,12 +227,10 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
             break;
         }
 
-        /* Bơm nhanh hơn slow-listen */
         float err = (inflate_target_mmhg - pressure_mmhg);
         uint8_t fast = (uint8_t)clampf(55.f + err * 1.5f, 35.f, (float)PUMP_PWM_MAX);
         pump_pwm = fast;
 
-        /* Không vượt SAF — đã check đầu tick */
         break;
     }
 

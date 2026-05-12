@@ -13,7 +13,7 @@ npm run dev
 ```
 
 - Giao thức `S/A/E`, `T` và **MAA** trên host: [`pc-bridge.md`](pc-bridge.md), [`algorithm.md`](algorithm.md).
-- Nút **Hủy** gửi `ABORT`; có ô kiểm **SAF** `T,300` (firmware clamp 280 mmHg).
+- Nút **Hủy** gửi `ABORT`; ô **SAF test** gửi `T,...` (clamp theo SAF đã cấu hình trên MCU / form, mặc định 175 mmHg). Sau kết nối, WebApp gửi `SAF` / `SAFH` / `HIGH` theo form **MCU — UART**.
 - **Firefox/Safari** không có Web Serial: có thể dùng bridge TCP như gợi ý trong [`pc-bridge.md`](pc-bridge.md) (`socat`/nhỏ script đọc COM và WebSocket) rồi mở rộng webapp sau nếu cần.
 
 ## Firmware (tham chiếu)

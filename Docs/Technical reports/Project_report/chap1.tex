@@ -1,0 +1,44 @@
+%===============================================================
+% chap1.tex — Chương 1: Giới thiệu
+%===============================================================
+\pagestyle{fancy}
+\chapter{GIỚI THIỆU}
+
+\section{Tổng quan đề tài}
+Đo huyết áp động mạch là một trong các chỉ số sinh lý quan trọng trong chẩn đoán và theo dõi bệnh tim mạch. Trong thực hành lâm sàng cổ điển, phương pháp Korotkoff kết hợp máy đo thủy ngân và ống nghe cho phép xác định áp tâm thu (SBP) và áp tâm trương (DBP) nhờ âm thanh nghe được khi xả khí vòng bít. Máy đo điện tử hiện đại phổ biến thay thế tai nghe bằng việc phân tích dao động áp suất nhỏ trên nền áp suất bao (\textit{oscillometric}), phù hợp với phần cứng chi phí thấp và tái lập trình.
+
+Đề tài xây dựng một nguyên mẫu máy đo oscillometric với các đặc điểm sau:
+\begin{itemize}\itemsep0pt \parskip0pt \parsep0pt
+	\item \textbf{Cảm biến áp:} MPX5050GP (đầu ra tương tự thuận tiện khuếch đại/đọc ADC).
+	\item \textbf{Bộ chuyển đổi số:} ADS1115 độ phân giải 16-bit, giao tiếp I\textsuperscript{2}C với STM32F103.
+	\item \textbf{Điều khiển khí nén:} bơm và van được điều chỉnh bằng PWM để đạt tốc độ bơm và xả mong muốn.
+	\item \textbf{An toàn:} giới hạn áp suất cực đại 280~mmHg (SAF), dừng khẩn cấp nút cứng và lệnh serial \texttt{ABORT}.
+	\item \textbf{Host:} WebApp đọc cổng serial (Web Serial), hiển thị sóng áp và thực hiện lọc số + thuật toán MAA để suy ra MAP, SBP, DBP.
+\end{itemize}
+
+\section{Nhiệm vụ đề tài}
+\noindent\textbf{Nội dung 1: Phần cứng và bo mạch (OscilloBP Monitor).}\\
+\vspace{-0.6cm}
+\begin{itemize}\itemsep0pt \parskip0pt \parsep0pt
+	\item \textbf{Mục tiêu:} Hoàn thiện mạch đo áp, MCU, điều khiển bơm/van, nút nhấn và LED trạng thái theo schematic/PCB trong kho mã.
+	\item \textbf{Ý tưởng thực hiện:} MPX5050 cấp điện áp tỉ lệ áp suất; ADS1115 lấy mẫu ổn định hơn ADC nội Blue Pill; STM32 điều phối FSM đo và streaming UART.
+\end{itemize}
+\vspace{-0.2cm}
+
+\noindent\textbf{Nội dung 2: Firmware STM32 (PlatformIO / STM32Cube).}\\
+\vspace{-0.6cm}
+\begin{itemize}\itemsep0pt \parskip0pt \parsep0pt
+	\item \textbf{Mục tiêu:} Đọc áp liên tục trong các pha đo, điều khiển bơm/van theo tốc độ đặt trước, đồng bộ với lệnh \texttt{T,...} từ host.
+	\item \textbf{Ý tưởng thực hiện:} Máy trạng thái gồm các pha bơm chậm (nghe dao động), ramp margin, xả chậm đo, xả nhanh kết thúc hoặc an toàn; định dạng khung \texttt{S,<seq>,<t\_ms>,<p\_mmHg>} và thông báo \texttt{A,...}, \texttt{E,...}.
+\end{itemize}
+\vspace{-0.2cm}
+
+\noindent\textbf{Nội dung 3: Phần mềm host và kiểm chứng.}\\
+\vspace{-0.6cm}
+\begin{itemize}\itemsep0pt \parskip0pt \parsep0pt
+	\item \textbf{Mục tiêu:} Hiển thị thời gian thực, lọc dao động, tính MAP/SBP/DBP bằng MAA; kiểm thử UART, LED và SAF.
+	\item \textbf{Ý tưởng thực hiện:} Band-pass 0{,}5--5~Hz trên chuỗi áp; phát hiện dao động đầu tiên trong pha bơm chậm để ước lượng \texttt{P\_sys\_est} và gửi \texttt{T,P\_sys\_est+margin}.
+\end{itemize}
+
+\section{Bố cục báo cáo}
+Ngoài phần đầu (tóm tắt, mục lục, danh mục hình/bảng và viết tắt), báo cáo gồm bốn chương chính và phần kết luận. \textbf{Chương 2} trình bày kiến trúc phần cứng và hình ảnh schematic/in PCB. \textbf{Chương 3} mô tả firmware, giao thức serial và cơ sở thuật toán oscillometric/MAA được triển khai trên host. \textbf{Chương 4} giới thiệu WebApp và checklist kiểm thử. \textbf{Kết luận} tóm tắt kết quả, hạn chế và hướng phát triển.

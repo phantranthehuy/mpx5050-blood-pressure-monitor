@@ -193,6 +193,7 @@ int main(void)
     uart_proto_send_line("A,IDLE\r\n");
 
     while (1) {
+        uart_proto_poll_ack_tx();
         if (!g_tick_100hz)
             continue;
         g_tick_100hz = 0;

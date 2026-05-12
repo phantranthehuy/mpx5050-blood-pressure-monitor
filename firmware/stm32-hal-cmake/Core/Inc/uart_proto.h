@@ -16,4 +16,7 @@ void uart_proto_send_line(const char *fmt, ...);
 /** Gọi từ HAL_UART_RxCpltCallback */
 void uart_proto_rx_callback(UART_HandleTypeDef *huart);
 
+/** Gửi hàng đợi xác nhận `R,OK,...` (RX ISR không được gọi HAL_UART_Transmit). */
+void uart_proto_poll_ack_tx(void);
+
 #endif

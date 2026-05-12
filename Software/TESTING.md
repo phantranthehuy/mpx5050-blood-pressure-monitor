@@ -7,17 +7,18 @@ Ghi chú kết quả (✓ / ngày / ghi chú). Tham chiếu đầy đủ phần 
 | ID | Mục | Kỳ vọng |
 |----|-----|---------|
 | SAF-T01 | **SAF-01** STOP đang bơm | Nhấn `SW_STOP`: bơm tắt ngay, van mở tối đa, đỏ nhấp nháy nhanh (~150 ms) |
-| SAF-T02 | **SAF-02** trần **280 mmHg** | Áp ≥ 280 mmHg (bench an toàn): bơm ngắt, van mở, LED khẩn cấp |
-| SAF-T03 | Lệnh `T,300` | Host gửi target >280 → firmware clamp **280** (không vượt SAF) |
+| SAF-T02 | **SAF-02** trần **175 mmHg** (mặc định; có thể đổi `SAF`/`SAFH` UART) | Áp ≥ trần hiệu lực: bơm ngắt, van mở, LED khẩn cấp |
+| SAF-T03 | Lệnh `T,300` | Host gửi target > SAF hiệu lực → firmware clamp đúng trần (không vượt SAF) |
 | SAF-T04 | `ABORT` / `A` serial | Trong đo: xả nhanh + LED khẩn cấp như STOP |
 
 ## UART đóng vòng
 
 | ID | Mục | Kỳ vọng |
 |----|-----|---------|
-| COM-T01 | Stream `S,...` | Trong inflate/deflate: ~100 dòng/giây, định dạng `S,seq,t,p` |
-| COM-T02 | `T,<mmHg>` | Sau detect ảo: MCU chuyển `A,INFLATE_MARGIN`, ramp tới target (≤280) |
+| COM-T01 | Stream `S,...` | Trong inflate/deflate: ~100 dòng/giây; Arduino: `S` đầy đủ trường debug (xem `pc-bridge.md`) |
+| COM-T02 | `T,<mmHg>` | Sau detect ảo: MCU chuyển `A,INFLATE_MARGIN`, ramp tới target (≤ trần SAF hiệu lực) |
 | COM-T03 | Mất serial giữa chừng | Fallback inflate timeout; SAF/STOP vẫn hoạt động |
+| COM-T04 | `SAF` / `SAFH` / `HIGH` | Gửi từ WebApp: MCU chấp nhận; quá áp / clamp `T` theo trần đã đặt |
 
 ## LED / HMI (LED_Algorithm)
 

@@ -35,7 +35,9 @@
 #define VALVE_CHANNEL       TIM_CHANNEL_2 /* PA7 */
 
 /* --- Safety / physics (hiệu chỉnh thực tế) --- */
-#define PRESSURE_SAFE_MAX_MMHG      280.0f
+#define PRESSURE_SAFE_MAX_MMHG       175.0f
+#define PRESSURE_SAFE_UART_MIN_MMHG  120.0f
+#define PRESSURE_SAFE_UART_MAX_MMHG  300.0f
 #define LEAK_TIMEOUT_MS             10000u
 #define INFLATE_FALLBACK_TARGET_MMHG 175.0f   /* khi không có lệnh T,... */
 #define INFLATE_FALLBACK_AFTER_MS   120000u    /* 2 phút chờ lệnh WebApp */

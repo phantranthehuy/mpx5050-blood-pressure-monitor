@@ -1,0 +1,52 @@
+%===============================================================
+% chap3.tex — Firmware và thuật toán
+%===============================================================
+\pagestyle{fancy}
+\chapter{FIRMWARE VÀ THUẬT TOÁN OSCILLOMETRIC}
+
+\section{Kiến trúc phần mềm nhúng}
+Firmware được xây dựng bằng PlatformIO, board \texttt{bluepill\_f103c8}, framework STM32Cube HAL. Các module chính:
+\begin{itemize}\itemsep0pt
+	\item Driver ADS1115 đọc kênh vi sai phù hợp với điện áp ra của MPX5050 và PGA đặt trong phạm vi đầy thang không bão hòa.
+	\item Chuyển đổi đếm ADC \(\rightarrow\) áp suất cuff (mmHg) bằng offset và hệ số scale (hiệu chỉnh thực nghiệm).
+	\item FSM đo huyết áp: pha bơm chậm có ``nghe'' dao động; pha ramp đến mục tiêu sau lệnh host; pha xả chậm để thu sóng oscillometric; pha xả nhanh kết thúc hoặc an toàn.
+	\item UART text-line: stream mẫu và thông báo trạng thái cho WebApp.
+\end{itemize}
+
+\section{Luồng đo và giao thức UART}
+Bảng~\ref{tab:uart-frames} tóm tắt các khung điển hình (chi tiết trong tài liệu \texttt{pc-bridge.md} của kho mã).
+
+\begin{table}[htbp]
+	\centering
+	\caption{Các dòng lệnh/thông báo UART tiêu biểu.}
+	\label{tab:uart-frames}
+	\begin{tabular}{ll}
+		\hline
+		\textbf{Dòng} & \textbf{Ý nghĩa} \\
+		\hline
+		\texttt{S,<seq>,<t\_ms>,<p\_mmHg>} & Stream áp suất (~100 Hz trong đo) \\
+		\texttt{A,IDLE} / \texttt{A,INFLATE\_SLOW} / \texttt{A,DEFLATE} & Trạng thái FSM \\
+		\texttt{T,<target\_mmHg>} & Host đặt áp mục tiêu (clamp \(\leq\) SAF) \\
+		\texttt{ABORT} hoặc \texttt{A} & Yêu cầu xả nhanh an toàn \\
+		\texttt{E,MEAS\_END} & Kết thúc đo \\
+		\hline
+	\end{tabular}
+\end{table}
+
+Tốc độ nền: baud 115200, kết thúc dòng \texttt{\textbackslash r\textbackslash n}. Trần SAF \textbf{280~mmHg} áp dụng đồng nhất cho điều khiển cục bộ và clamp lệnh \texttt{T,...}.
+
+\section{Cơ sở thuật toán MAA trên host}
+Thuật toán biên độ cực đại (MAA) làm việc trên đường bao dao động (OWE) của thành phần AC của áp suất cuff trong quá trình xả chậm:
+\begin{enumerate}\itemsep0pt
+	\item Xác định \(\mathrm{MAP}\) là áp suất cuff tại điểm biên độ dao động cực đại \(A_{\max}\).
+	\item Với các hệ số đặc trưng \(r_s\) (tâm thu) và \(r_d\) (tâm trương), tính các mức biên độ mục tiêu \(A_{\mathrm{sys}} = r_s A_{\max}\), \(A_{\mathrm{dia}} = r_d A_{\max}\).
+	\item Dò nhánh áp cao hơn MAP để tìm điểm gần \(A_{\mathrm{sys}}\) \(\Rightarrow\) SBP; dò nhánh áp thấp hơn MAP để tìm điểm gần \(A_{\mathrm{dia}}\) \(\Rightarrow\) DBP.
+\end{enumerate}
+
+Trên host, trước khi trích envelope và cực đại, tài liệu kỹ thuật dự án khuyến nghị \textbf{lọc số dải thông 0{,}5--5~Hz} để giữ nhịp mạch và giảm nhiễu tay/run.
+
+\section{Đồng bộ với pha bơm chậm}
+Trong pha \texttt{INFLATE\_SLOW}, WebApp theo dõi dao động sau lọc để ước lượng \(\mathrm{P\_sys\_est}\). Sau đó host gửi \(\texttt{T},\mathrm{P\_sys\_est}+40\) (margin mặc định trong \texttt{board\_config.h}) để MCU ramp đến mục tiêu rồi chuyển xả chậm đo. Nếu không có host trong thời gian chờ, firmware có thể ramp theo mục tiêu dự phòng (\texttt{INFLATE\_FALLBACK\_TARGET\_MMHG}).
+
+\section{LED và trải nghiệm người dùng}
+LED phản ánh trạng thái không chặn luồng đo (tham chiếu \texttt{LED\_Algorithm.md}): idle/done xanh; bơm margin vàng nhấp nháy; đo/xả vàng sáng; STOP/SAF/\texttt{ABORT} đỏ nhấp nháy nhanh; lỗi rò/I2C đỏ sáng.

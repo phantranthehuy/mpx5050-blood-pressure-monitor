@@ -91,3 +91,40 @@ Nếu bạn chỉ code theo 3 bước trên, máy của bạn đo ngưo�
 2.  **Khớp đường cong (Curve Fitting - Gaussian):** Mảng dữ liệu của bạn có thể không có điểm nào chính xác bằng `0.5 * A_max` (ví dụ đo thực tế AC nhảy từ 4.5 lên thẳng 5.8). Thay vì lấy gần đúng, các hãng lớn (như GE, Philips) dùng toán học để vẽ một hàm Gaussian mô phỏng lại đường bao AC để nội suy ra con số áp suất mượt mà nhất.
 
 3.  **Hệ số thích ứng (Biến thiên):** Thay vì fix cứng mã lệnh C là `rs = 0.5`, thuật toán hiện đại sẽ phân tích "độ rộng của hình quả chuông". Quả chuông càng rộng chứng tỏ mạch máu bệnh nhân càng cứng (người già), STM32 sẽ tự động thay đổi hệ số $r_s$ lên 0.54, $r_d$ lên 0.72 để kết quả không bị sai lệch.
+
+---
+
+## Thời điểm có SYS/DIA trong repo và khả năng xả nhanh sớm
+
+Phần này mô tả **hành vi thực tế** của firmware + WebApp (MAA trong `webapp/src/dsp.ts`), không thay thế các bước lý thuyết ở trên.
+
+```mermaid
+flowchart LR
+  subgraph current [Luồng hiện tại]
+    A[Inflate] --> B[Deflate_slow_collect_peaks]
+    B --> C["Áp cuff ≤ 15 mmHg"]
+    C --> D[DONE / finalizeMaa]
+    D --> E[SYS DIA MAP]
+  end
+```
+
+### Khi nào mới có SYS và DIA?
+
+1. **Về thuật toán MAA:** Cần đủ điểm trên **đường bao** (biên độ AC theo áp vòng bít giảm dần): xác định **MAP** tại biên độ cực đại \(A_{max}\), rồi suy **SBP** trên nhánh áp cuff **cao hơn** MAP và **DBP** trên nhánh **thấp hơn** MAP (hệ số \(r_s\), \(r_d\)). Không thể bỏ qua nhánh dưới MAP nếu muốn DBP đáng tin.
+
+2. **Trong code WebApp:** Các đỉnh bao được gom trong pha xả chậm (`deflate`). Hàm `finalizeMaa()` / `runMaa()` chỉ chạy khi FSM MCU báo **kết thúc đo** (chuyển trạng thái tương ứng `meas_end`). `runMaa` còn yêu cầu **ít nhất 5 đỉnh**; nếu ít hơn thì không trả về kết quả.
+
+3. **Trên firmware (ví dụ `stm32-arduino-pio`):** Pha `DEFLATE_MEASURE` xả chậm cho đến khi áp vòng bít xuống **≤ `MEASURE_END_PRESSURE_MMHG`** (khoảng 15 mmHg, có debounce), rồi `DONE`. Điều này **không** phụ thuộc vào việc WebApp đã “tính xong” hay chưa; thời lượng xả chậm cố định theo ngưỡng áp cuối.
+
+### Có thể xác định sớm rồi xả nhanh không?
+
+**Có thể về nguyên tắc**, nhưng không phải “vừa thấy tín hiệu ổn là dừng”:
+
+- Cần đủ mẫu **phía dưới MAP** (thường áp cuff đã xuống **thấp hơn DBP ước lượng thêm một biên an toàn**), vì nhánh đó phẳng và nhiễu — dừng sớm quanh MAP hoặc ngay sau SBP làm **DBP sai hoặc không tính được**.
+- Mở van xả **đột ngột** khi áp còn cao có thể làm méo dao động tùy cơ khí/điều khiển; cần thử nghiệm riêng.
+
+Hướng triển khai sau này (chưa có trong firmware hiện tại): chạy MAA thử trên bộ đỉnh đang tăng, kiểm tra ổn định ước lượng và áp cuff đã đủ thấp, rồi mới gửi lệnh kết thúc đo / xả nhanh (cần mở rộng giao thức UART và kiểm tra an toàn).
+
+### Lưu ý: code thuật toán khác trong repo
+
+Module `Algorithm/test001` (ví dụ `peak_detection.c`) dùng mô hình kiểu “baseline + max/min biên độ đỉnh” — **không tương đương** MAA + \(r_s\)/\(r_d\) như WebApp và mục lý thuyết ở trên.

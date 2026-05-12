@@ -34,18 +34,109 @@ static int line_is_abort_cmd(const char *line)
     return (tail == '\0' || tail == '\r' || tail == ' ' || tail == '\t');
 }
 
+static int line_is_start_cmd(const char *line)
+{
+    while (*line == ' ' || *line == '\t') line++;
+    const char *expect = "START";
+    for (int i = 0; expect[i] != '\0'; i++) {
+        if (line[i] == '\0')
+            return 0;
+        if (upper_char((unsigned char)line[i]) != (int)expect[i])
+            return 0;
+    }
+    char tail = line[5];
+    return (tail == '\0' || tail == '\r' || tail == ' ' || tail == '\t');
+}
+
+static int line_is_earlyend_cmd(const char *line)
+{
+    while (*line == ' ' || *line == '\t') line++;
+    const char *expect = "EARLYEND";
+    for (int i = 0; expect[i] != '\0'; i++) {
+        if (line[i] == '\0')
+            return 0;
+        if (upper_char((unsigned char)line[i]) != (int)expect[i])
+            return 0;
+    }
+    char tail = line[8];
+    return (tail == '\0' || tail == '\r' || tail == ' ' || tail == '\t');
+}
+
+/** So khớp tiền tố ASCII không phân biệt hoa thường. */
+static int prefix_ci(const char *line, const char *prefix)
+{
+    for (; *prefix != '\0'; ++line, ++prefix) {
+        if (*line == '\0')
+            return 0;
+        if (upper_char((unsigned char)*line) != (unsigned char)*prefix)
+            return 0;
+    }
+    return 1;
+}
+
 static void handle_cmd_line(const char *line)
 {
     while (*line == ' ' || *line == '\t') line++;
 
     if (line[0] == 'T' || line[0] == 't') {
         float v = 0.f;
-        if (sscanf(line + 1, ",%f", &v) == 1)
+        if (sscanf(line + 1, ",%f", &v) == 1) {
             bp_fsm_host_set_target_mmhg(v);
+            uart_proto_send_line("R,OK,T\r\n");
+        }
         return;
     }
-    if (line_is_abort_cmd(line))
+    if (prefix_ci(line, "SAF,")) {
+        float v = 0.f;
+        if (sscanf(line + 4, "%f", &v) == 1) {
+            bp_fsm_host_set_saf_mmhg(v);
+            uart_proto_send_line("R,OK,SAF\r\n");
+        }
+        return;
+    }
+    if (prefix_ci(line, "SAFH,")) {
+        float v = 0.f;
+        if (sscanf(line + 5, "%f", &v) == 1) {
+            bp_fsm_host_set_saf_high_mmhg(v);
+            uart_proto_send_line("R,OK,SAFH\r\n");
+        }
+        return;
+    }
+    if (prefix_ci(line, "HIGH,")) {
+        int bit = 0;
+        if (sscanf(line + 5, "%d", &bit) == 1) {
+            bp_fsm_host_set_high_uart(bit ? 1u : 0u);
+            uart_proto_send_line("R,OK,HIGH\r\n");
+        }
+        return;
+    }
+    if (prefix_ci(line, "DR,")) {
+        float v = 0.f;
+        if (sscanf(line + 3, "%f", &v) == 1) {
+            bp_fsm_host_set_deflate_rate_mmhg_s(v);
+            uart_proto_send_line("R,OK,DR\r\n");
+        }
+        return;
+    }
+    if (line_is_start_cmd(line)) {
+        bp_fsm_host_request_uart_start();
+        uart_proto_send_line("R,OK,START\r\n");
+        return;
+    }
+    if (line_is_earlyend_cmd(line)) {
+        if (bp_fsm_get_state() == BP_STATE_DEFLATE_MEASURE) {
+            bp_fsm_host_request_early_measure_done();
+            uart_proto_send_line("R,OK,EARLYEND\r\n");
+        } else {
+            uart_proto_send_line("R,SKIP,EARLYEND\r\n");
+        }
+        return;
+    }
+    if (line_is_abort_cmd(line)) {
         bp_fsm_host_abort_measure();
+        uart_proto_send_line("R,OK,ABORT\r\n");
+        return;
+    }
 }
 
 static void feed_rx_byte(uint8_t b)
@@ -80,9 +171,9 @@ extern "C" void uart_proto_poll_rx(void)
 extern "C" void uart_proto_send_sample(uint32_t seq, uint32_t t_ms, float p_mmhg,
                                        int rc, int16_t counts,
                                        int fsm, int pump_pct, int valve_pct,
-                                       int btn_s, int btn_p, int btn_h)
+                                       int btn_s, int btn_p, int btn_h, int dp_centi)
 {
-    char line[112];
+    char line[128];
     /* Tránh %f: newlib nano trên STM32 thường không link printf float → mmHg bị trống. */
     float p = p_mmhg;
     int sign = (p < 0.f) ? -1 : 1;
@@ -94,13 +185,14 @@ extern "C" void uart_proto_send_sample(uint32_t seq, uint32_t t_ms, float p_mmhg
      * vì sao bấm START mà motor không bơm (state có chuyển không, PWM có
      * lên không, nút STOP có bị stuck low không). */
     int n = snprintf(line, sizeof(line),
-                     "S,%lu,%lu,%s%lu.%02lu,%d,%d,%d,%d,%d,%d%d%d\r\n",
+                     "S,%lu,%lu,%s%lu.%02lu,%d,%d,%d,%d,%d,%d%d%d,%d\r\n",
                      (unsigned long)seq, (unsigned long)t_ms,
                      (sign < 0) ? "-" : "",
                      cents / 100UL, cents % 100UL,
                      rc, (int)counts,
                      fsm, pump_pct, valve_pct,
-                     btn_s ? 1 : 0, btn_p ? 1 : 0, btn_h ? 1 : 0);
+                     btn_s ? 1 : 0, btn_p ? 1 : 0, btn_h ? 1 : 0,
+                     dp_centi);
     if (n > 0)
         Serial.write((const uint8_t *)line, (size_t)n);
 }
