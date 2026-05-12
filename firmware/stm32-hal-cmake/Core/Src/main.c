@@ -213,11 +213,6 @@ int main(void)
         uint32_t now = HAL_GetTick();
         bp_fsm_on_tick(now, p_mmhg, start, stop, high);
 
-        uart_proto_send_sample(seq++, now, p_mmhg);
-
-        apply_pwm_outputs();
-        led_hmi_task(bp_fsm_led_hmi_state());
-
         BpState stt = bp_fsm_get_state();
         if (stt != prev_state) {
             if (stt == BP_STATE_INFLATE_SLOW_LISTEN)
@@ -235,6 +230,12 @@ int main(void)
             else if (stt == BP_STATE_IDLE && prev_state != BP_STATE_IDLE)
                 uart_proto_send_line("A,IDLE\r\n");
         }
+
+        uart_proto_send_sample(seq++, now, p_mmhg);
+
+        apply_pwm_outputs();
+        led_hmi_task(bp_fsm_led_hmi_state());
+
         prev_state = stt;
     }
 }
