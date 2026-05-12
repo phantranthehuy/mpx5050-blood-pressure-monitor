@@ -1,6 +1,11 @@
 /**
  * Port song song với firmware HAL (`firmware/stm32-hal-cmake/Core/Src/main.c`):
- * TIM2 100 Hz, PWM bơm/van 1 kHz (analogWrite), đọc ADS1115, stream UART, FSM + LED.
+ * TIM3 100 Hz tick, PWM bơm/van 1 kHz qua TIM2 (analogWrite trên PA0/PA1),
+ * đọc ADS1115, stream UART, FSM + LED.
+ *
+ * Lưu ý: PA0=TIM2_CH1, PA1=TIM2_CH2 → analogWrite() chiếm TIM2 cho PWM 1 kHz,
+ * nên ngắt 100 Hz phải dùng timer khác (chọn TIM3 vì cũng general-purpose,
+ * không vướng chân nào đang sử dụng).
  */
 #include <Arduino.h>
 #include <HardwareTimer.h>
@@ -19,13 +24,14 @@ extern "C" {
 #include "led_hmi.h"
 #include "uart_proto.h"
 
-static HardwareTimer tim2(TIM2);
+/* TIM3 dùng cho ngắt 100 Hz; TIM2 để analogWrite() PWM 1 kHz lên PA0/PA1. */
+static HardwareTimer tim_tick(TIM3);
 
 static volatile bool g_tick_100hz = false;
 
 static Ads1115_Handle g_ads;
 
-static void tim2_100hz_callback(void)
+static void tick_100hz_callback(void)
 {
     g_tick_100hz = true;
 }
@@ -109,14 +115,17 @@ void setup(void)
 
     bp_fsm_init();
 
-    tim2.setOverflow(100, HERTZ_FORMAT);
-    tim2.attachInterrupt(tim2_100hz_callback);
-    tim2.resume();
-
+    /* PWM bơm/van trên TIM2 (PA0/PA1) — set TRƯỚC khi cấu hình TIM3 tick,
+     * vì analogWriteFrequency() trong STM32duino reconfig timer của các pin
+     * đã analogWrite. Gọi đúng thứ tự để khỏi đụng vào TIM3. */
     analogWriteFrequency(1000u);
     analogWriteResolution(10);
     analogWrite(PIN_PWM_PUMP, 0);
     analogWrite(PIN_PWM_VALVE, 0);
+
+    tim_tick.setOverflow(100, HERTZ_FORMAT);
+    tim_tick.attachInterrupt(tick_100hz_callback);
+    tim_tick.resume();
 
     uart_proto_send_line("A,IDLE\r\n");
 }
