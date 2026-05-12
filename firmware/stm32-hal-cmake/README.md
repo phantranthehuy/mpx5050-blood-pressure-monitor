@@ -1,6 +1,6 @@
 # Firmware — máy đo huyết áp oscillometric (STM32F103 Blue Pill)
 
-Project **STM32Cube / CMake** (HAL): đọc áp **ADS1115** (I2C), điều khiển **bơm/van PWM**, stream **100 Hz** qua UART cho WebApp/PC, SAF **280 mmHg** và **Emergency Stop** cục bộ.
+Project **STM32Cube / CMake** (HAL): đọc áp **ADS1115** (I2C), điều khiển **bơm/van PWM**, stream **100 Hz** qua UART cho WebApp/PC, SAF mặc định **175 mmHg** (có thể đổi UART `SAF` / `SAFH`) và **Emergency Stop** cục bộ.
 
 ## Build & nạp
 

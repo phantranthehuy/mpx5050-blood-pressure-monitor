@@ -12,12 +12,18 @@ static uint8_t rx_byte;
 static char rx_buf[RX_BUF_LEN];
 static uint8_t rx_idx;
 
+/** Hàng đợi xác nhận lệnh — push từ ISR, gửi từ vòng main. */
+#define UART_ACK_CAP 8u
+static const char *uart_ack_q[UART_ACK_CAP];
+static volatile uint32_t uart_ack_wr;
+static volatile uint32_t uart_ack_rd;
+
 static void arm_rx(void)
 {
     (void)HAL_UART_Receive_IT(g_uart, &rx_byte, 1u);
 }
 
-static int upper_char(char c)
+static int upper_char(unsigned char c)
 {
     if (c >= 'a' && c <= 'z')
         return (int)c - 32;
@@ -39,18 +45,97 @@ static int line_is_abort_cmd(const char *line)
     return (tail == '\0' || tail == '\r' || tail == ' ' || tail == '\t');
 }
 
+static int line_is_start_cmd(const char *line)
+{
+    while (*line == ' ' || *line == '\t') line++;
+    const char *expect = "START";
+    for (int i = 0; expect[i] != '\0'; i++) {
+        if (line[i] == '\0')
+            return 0;
+        if (upper_char((unsigned char)line[i]) != (int)expect[i])
+            return 0;
+    }
+    char tail = line[5];
+    return (tail == '\0' || tail == '\r' || tail == ' ' || tail == '\t');
+}
+
+static int prefix_ci(const char *line, const char *prefix)
+{
+    for (; *prefix != '\0'; ++line, ++prefix) {
+        if (*line == '\0')
+            return 0;
+        if (upper_char((unsigned char)*line) != (unsigned char)*prefix)
+            return 0;
+    }
+    return 1;
+}
+
+static void ack_push_isr(const char *msg)
+{
+    if (msg == NULL)
+        return;
+    if (uart_ack_wr - uart_ack_rd >= UART_ACK_CAP)
+        return;
+    uart_ack_q[uart_ack_wr % UART_ACK_CAP] = msg;
+    uart_ack_wr++;
+}
+
+void uart_proto_poll_ack_tx(void)
+{
+    while (uart_ack_rd < uart_ack_wr && g_uart != NULL) {
+        const char *m = uart_ack_q[uart_ack_rd % UART_ACK_CAP];
+        size_t L = strlen(m);
+        (void)HAL_UART_Transmit(g_uart, (uint8_t *)m, (uint16_t)L, 50u);
+        uart_ack_rd++;
+    }
+}
+
 static void handle_cmd_line(const char *line)
 {
     while (*line == ' ' || *line == '\t') line++;
 
     if (line[0] == 'T' || line[0] == 't') {
         float v = 0.f;
-        if (sscanf(line + 1, ",%f", &v) == 1)
+        if (sscanf(line + 1, ",%f", &v) == 1) {
             bp_fsm_host_set_target_mmhg(v);
+            ack_push_isr("R,OK,T\r\n");
+        }
         return;
     }
-    if (line_is_abort_cmd(line))
+    if (prefix_ci(line, "SAF,")) {
+        float v = 0.f;
+        if (sscanf(line + 4, "%f", &v) == 1) {
+            bp_fsm_host_set_saf_mmhg(v);
+            ack_push_isr("R,OK,SAF\r\n");
+        }
+        return;
+    }
+    if (prefix_ci(line, "SAFH,")) {
+        float v = 0.f;
+        if (sscanf(line + 5, "%f", &v) == 1) {
+            bp_fsm_host_set_saf_high_mmhg(v);
+            ack_push_isr("R,OK,SAFH\r\n");
+        }
+        return;
+    }
+    if (prefix_ci(line, "HIGH,")) {
+        int bit = 0;
+        if (sscanf(line + 5, "%d", &bit) == 1) {
+            bp_fsm_host_set_high_uart(bit ? 1u : 0u);
+            ack_push_isr("R,OK,HIGH\r\n");
+        }
+        return;
+    }
+    if (line_is_start_cmd(line)) {
+        bp_fsm_host_request_uart_start();
+        ack_push_isr("R,OK,START\r\n");
+        return;
+    }
+    if (line_is_abort_cmd(line)) {
         bp_fsm_host_abort_measure();
+        ack_push_isr("R,OK,ABORT\r\n");
+        return;
+    }
 }
 
 static void feed_rx_byte(uint8_t b)
@@ -71,6 +156,8 @@ void uart_proto_init(UART_HandleTypeDef *huart)
 {
     g_uart = huart;
     rx_idx = 0;
+    uart_ack_wr = 0u;
+    uart_ack_rd = 0u;
     arm_rx();
 }
 

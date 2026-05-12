@@ -10,8 +10,6 @@
 #include <Arduino.h>
 #include <HardwareTimer.h>
 #include <Wire.h>
-#include <stdio.h>
-#include <string.h>
 
 extern "C" {
 #include "board_config.h"
@@ -36,15 +34,31 @@ static void tick_100hz_callback(void)
     g_tick_100hz = true;
 }
 
+/** Ánh xạ % logic FSM (0=giữ áp … 100=xả max) → % PWM chân van. */
+static int valve_logic_to_pin_pct(uint32_t logic_pct)
+{
+    if (logic_pct > 100u)
+        logic_pct = 100u;
+    const int seal = (int)VALVE_PIN_AT_LOGIC_SEAL;
+    const int vent = (int)VALVE_PIN_AT_LOGIC_VENT;
+    int pin = seal + (vent - seal) * (int)logic_pct / 100;
+    if (pin < 0)
+        pin = 0;
+    if (pin > 100)
+        pin = 100;
+    return pin;
+}
+
 static void apply_pwm_outputs(void)
 {
     uint32_t pump = bp_fsm_get_pump_pwm_percent();
-    uint32_t valve = bp_fsm_get_valve_pwm_percent();
+    uint32_t valve_logic = bp_fsm_get_valve_pwm_percent();
     if (pump > 100u) pump = 100u;
-    if (valve > 100u) valve = 100u;
+    if (valve_logic > 100u) valve_logic = 100u;
+    const int valve_pin = valve_logic_to_pin_pct(valve_logic);
     /* 10-bit: 0–1023 ~ 0–100 % (tương đương HAL ARR=999, compare=pump*10) */
     analogWrite(PIN_PWM_PUMP, (int)((pump * 1023u) / 100u));
-    analogWrite(PIN_PWM_VALVE, (int)((valve * 1023u) / 100u));
+    analogWrite(PIN_PWM_VALVE, (int)(((uint32_t)valve_pin * 1023u) / 100u));
 }
 
 void setup(void)
@@ -63,53 +77,9 @@ void setup(void)
     Wire.setSCL(PIN_I2C_SCL);
     Wire.setSDA(PIN_I2C_SDA);
     Wire.begin();
-    Wire.setClock(100000); /* tạm hạ xuống 100 kHz khi debug bus */
+    Wire.setClock(100000);
 
     uart_proto_init();
-
-    /* --- DEBUG: I2C scanner.
-     * Quét bus → lưu kết quả vào buffer → in lặp mỗi 1 s cho tới khi user
-     * gõ bất kỳ phím nào trên monitor (Enter), rồi mới chạy app.
-     * Mục đích: tránh dòng `S,...` trôi mất kết quả scan trước khi mở monitor.
-     */
-    delay(200);
-    char scan_summary[256];
-    int sp = 0;
-    sp += snprintf(scan_summary + sp, sizeof(scan_summary) - sp,
-                   "I2C scan @100kHz on PB6/PB7: ");
-    uint8_t found = 0;
-    for (uint8_t addr = 1; addr < 127; addr++) {
-        Wire.beginTransmission(addr);
-        uint8_t err = Wire.endTransmission();
-        if (err == 0) {
-            sp += snprintf(scan_summary + sp, sizeof(scan_summary) - sp,
-                           "0x%02X ", addr);
-            found++;
-            if (sp > (int)sizeof(scan_summary) - 16) break;
-        }
-    }
-    sp += snprintf(scan_summary + sp, sizeof(scan_summary) - sp,
-                   "(total=%u)", (unsigned)found);
-
-    /* Drain rác có sẵn trong RX */
-    while (Serial.available() > 0) (void)Serial.read();
-
-    /* In lặp lại tới khi nhận 1 byte từ monitor */
-    uint32_t last_print = 0;
-    for (;;) {
-        uint32_t t = millis();
-        if (t - last_print >= 1000u || last_print == 0u) {
-            last_print = t;
-            Serial.println();
-            Serial.println(scan_summary);
-            Serial.println(">>> Mo Serial Monitor, go Enter (gui 1 byte) de bat dau stream <<<");
-        }
-        if (Serial.available() > 0) {
-            while (Serial.available() > 0) (void)Serial.read();
-            break;
-        }
-    }
-    Serial.println("Streaming...");
 
     ads1115_init(&g_ads);
 
@@ -120,8 +90,8 @@ void setup(void)
      * đã analogWrite. Gọi đúng thứ tự để khỏi đụng vào TIM3. */
     analogWriteFrequency(1000u);
     analogWriteResolution(10);
-    analogWrite(PIN_PWM_PUMP, 0);
-    analogWrite(PIN_PWM_VALVE, 0);
+    /* Ghi PWM theo cùng ánh xạ FSM→chân van (tránh lệch một nhịp với raw 0). */
+    apply_pwm_outputs();
 
     tim_tick.setOverflow(100, HERTZ_FORMAT);
     tim_tick.attachInterrupt(tick_100hz_callback);
@@ -132,6 +102,22 @@ void setup(void)
 
 static uint32_t g_seq = 0;
 static BpState g_prev_state = BP_STATE_IDLE;
+static float g_last_valid_pressure_mmhg = 0.0f;
+
+static const char *error_reason_line(BpErrorReason reason)
+{
+    switch (reason) {
+    case BP_ERROR_I2C_SENSOR:
+        return "E,SENSOR_I2C\r\n";
+    case BP_ERROR_OVERPRESSURE:
+        return "E,OVERPRESSURE\r\n";
+    case BP_ERROR_LEAK:
+        return "E,LEAK\r\n";
+    case BP_ERROR_NONE:
+    default:
+        return "E,ERROR\r\n";
+    }
+}
 
 void loop(void)
 {
@@ -152,10 +138,19 @@ void loop(void)
     else
         bp_fsm_sensor_i2c_ok();
 
-    float p_mmhg = pressure_counts_to_mmhg(counts);
+    float p_mmhg = g_last_valid_pressure_mmhg;
+    if (rc == 0) {
+        p_mmhg = pressure_counts_to_mmhg(counts);
+        g_last_valid_pressure_mmhg = p_mmhg;
+    }
     uint32_t now = millis();
 
     bp_fsm_on_tick(now, p_mmhg, start, stop, high);
+
+    /* PWM + LED ngay sau FSM: Serial.write (USB CDC) có thể block lâu khi host không
+     * đọc kịp — nếu gửi UART trước apply_pwm thì bơm/van kẹt ở duty tick trước. */
+    apply_pwm_outputs();
+    led_hmi_task(bp_fsm_led_hmi_state());
 
     BpState stt = bp_fsm_get_state();
     /* Gửi A/E trước S trong cùng tick đổi trạng thái — dễ thấy trên monitor/plotter. */
@@ -171,19 +166,25 @@ void loop(void)
         else if (stt == BP_STATE_DONE)
             uart_proto_send_line("E,MEAS_END\r\n");
         else if (stt == BP_STATE_ERROR)
-            uart_proto_send_line("E,SENSOR_OR_LEAK\r\n");
+            uart_proto_send_line(error_reason_line(bp_fsm_get_error_reason()));
+        else if (stt == BP_STATE_IDLE_VENT)
+            uart_proto_send_line("A,IDLE_VENT\r\n");
         else if (stt == BP_STATE_IDLE && g_prev_state != BP_STATE_IDLE)
             uart_proto_send_line("A,IDLE\r\n");
     }
+
+    float dps = bp_fsm_get_last_dp_dt_mmhg_s();
+    int dp_centi = (int)(dps * 100.f + (dps >= 0.f ? 0.5f : -0.5f));
+    if (dp_centi > 32000)
+        dp_centi = 32000;
+    if (dp_centi < -32000)
+        dp_centi = -32000;
 
     uart_proto_send_sample(g_seq++, now, p_mmhg, rc, counts,
                            (int)stt,
                            (int)bp_fsm_get_pump_pwm_percent(),
                            (int)bp_fsm_get_valve_pwm_percent(),
-                           start, stop, high);
-
-    apply_pwm_outputs();
-    led_hmi_task(bp_fsm_led_hmi_state());
+                           start, stop, high, dp_centi);
 
     g_prev_state = stt;
 }

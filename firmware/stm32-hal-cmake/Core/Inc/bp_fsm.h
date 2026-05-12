@@ -25,6 +25,12 @@ void bp_fsm_host_set_target_mmhg(float target_mmhg);
 
 void bp_fsm_host_abort_measure(void);
 
+void bp_fsm_host_request_uart_start(void);
+
+void bp_fsm_host_set_saf_mmhg(float mmhg);
+void bp_fsm_host_set_saf_high_mmhg(float mmhg);
+void bp_fsm_host_set_high_uart(uint8_t on);
+
 /** Đếm lỗi I2C liên tiếp — main reset khi đọc OK */
 void bp_fsm_sensor_i2c_fail(void);
 void bp_fsm_sensor_i2c_ok(void);

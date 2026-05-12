@@ -1,0 +1,14 @@
+%===============================================================
+% ketluan.tex — Kết luận
+%===============================================================
+\chapter*{{\Large\begin{center}KẾT LUẬN\end{center}}}
+\addcontentsline{toc}{chapter}{Kết luận}
+
+\section*{Kết quả đạt được}
+Đề tài đã xây dựng được một nguyên mẫu máy đo huyết áp oscillometric với đầy đủ các khối chức năng: cảm biến MPX5050, ADC ADS1115, vi điều khiển STM32F103 điều khiển bơm/van PWM và streaming UART; phần mềm WebApp trên trình duyệt hỗ trợ Web Serial để hiển thị sóng áp, lọc số và MAA nhằm suy ra MAP, SBP và DBP; cơ chế an toàn trần áp 280~mmHg và dừng khẩn cấp được triển khai đồng thời trên firmware và qua lệnh serial. Bo mạch và schematic được thể hiện trong dự án KiCad OscilloBP Monitor kèm Gerber phục vụ gia công.
+
+\section*{Hạn chế}
+Độ chính xác tuyệt đối phụ thuộc mạnh vào hiệu chỉnh offset/scale của kênh đo áp và vào bộ hệ số \(r_s\), \(r_d\) của MAA; các giá trị mặc định trong tài liệu chỉ mang tính tham chiếu và cần tinh chỉnh theo dữ liệu lâm sàng hoặc bộ phép đo chuẩn. Web Serial giới hạn loại trình duyệt; đo trong điều kiện chuyển động tay hoặc nhiễu điện từ có thể làm méo envelope nếu không bổ sung lọc/outlier mạnh hơn.
+
+\section*{Hướng phát triển}
+Áp dụng hiệu chỉnh đa điểm và lưu hệ số trên EEPROM; mở rộng thuật toán (khớp đường cong Gauss, thích ứng \(r_s,r_d\)); tích hợp bridge TCP/WebSocket cho đa nền tảng; thực hiện thử nghiệm so sánh với máy đo đã chứng nhận y tế và hoàn thiện hồ sơ an toàn điện/khí nén cho sản phẩm.

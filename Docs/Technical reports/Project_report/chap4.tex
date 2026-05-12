@@ -1,0 +1,47 @@
+%===============================================================
+% chap4.tex — Phần mềm host và kiểm thử
+%===============================================================
+\pagestyle{fancy}
+\chapter{PHẦN MỀM HOST VÀ KIỂM THỬ}
+
+\section{WebApp và Web Serial}
+Ứng dụng web (\texttt{Software/webapp}) dùng Vite và TypeScript, chạy trên trình duyệt Chrome hoặc Edge với API Web Serial để mở cổng USB--TTL nối UART của MCU. Giao diện hiển thị sóng áp thời gian thực và các nút điều khiển (\textbf{Hủy} gửi \texttt{ABORT}; ô kiểm SAF có thể minh họa clamp khi gửi \texttt{T,300}).
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=0.92\textwidth]{images/webapp-hero.png}
+	\caption{Minh họa giao diện WebApp (ảnh hero trong kho mã).}
+	\label{fig:webapp}
+\end{figure}
+
+\section{Xử lý tín hiệu trên host}
+Luồng xử lý khuyến nghị:
+\begin{enumerate}\itemsep0pt
+	\item Thu thập chuỗi mẫu áp từ các dòng \texttt{S,...}.
+	\item Áp dụng lọc dải thông 0{,}5--5~Hz để cô lập dao động pulsatile.
+	\item Trong bơm chậm: phát hiện dao động đạt ngưỡng đủ lớn để ghi \(\mathrm{P\_sys\_est}\).
+	\item Gửi \(\texttt{T},\mathrm{P\_sys\_est}+\mathrm{margin}\) xuống MCU.
+	\item Trong xả chậm: xây envelope và chạy MAA để hiển thị MAP/SBP/DBP.
+\end{enumerate}
+
+\section{Kiểm thử được khuyến nghị}
+Checklist trong \texttt{Firmware/TESTING.md} và \texttt{Firmware/testcase.md} hướng dẫn các nhóm thử:
+
+\noindent\textbf{Nhóm an toàn (SAF):}
+\begin{itemize}\itemsep0pt
+	\item STOP khi đang bơm: bơm tắt ngay, van mở tối đa, LED đỏ nhấp nháy nhanh.
+	\item Trần 280~mmHg: MCU cắt bơm và báo động.
+	\item Lệnh \texttt{T,300}: firmware clamp về 280.
+	\item \texttt{ABORT}/\texttt{A}: xả nhanh như STOP phần cứng về hành vi an toàn.
+\end{itemize}
+
+\noindent\textbf{Nhóm UART:}
+\begin{itemize}\itemsep0pt
+	\item Kiểm tra ~100 khung \texttt{S,...}/giây trong inflate/deflate.
+	\item Sau \texttt{T,...}, MCU vào margin rồi xả đo đúng trình tự.
+\end{itemize}
+
+\noindent\textbf{Nhóm LED/HMI:} idle xanh; inflate vàng nhấp nháy \(\sim\)500~ms; đo/xả vàng sáng; STOP/SAF/fast deflate đỏ nhấp nháy \(\sim\)150~ms; lỗi rò/I2C đỏ sáng.
+
+\section{Hạn chế của kiểm thử trong phòng lab}
+ Firefox/Safari không hỗ trợ Web Serial; có thể cần bridge TCP/\texttt{socat} nếu phải dùng trình duyệt khác. Đánh giá độ chính xác lâm sàng đòi hiệu chỉnh đồng hồ áp và mẫu đối chứng đủ lớn, nằm ngoài phạm vi một checklist chức năng thuần túy.

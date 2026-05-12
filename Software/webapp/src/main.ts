@@ -6,8 +6,14 @@ import {
   LineAccumulator,
   parseUartLine,
   formatAbortCommand,
+  formatStartCommand,
   formatTargetCommand,
+  formatSafCommand,
+  formatSafHighCommand,
+  formatHighUartCommand,
   clampTargetMmhg,
+  clampUartSafMmhg,
+  SAF_DEFAULT_MMHG,
   type ParsedLine,
 } from './protocol';
 import { MeasurementProcessor, type PhaseUi } from './dsp';
@@ -73,8 +79,8 @@ function mountUi(): {
     chkAc: HTMLInputElement;
     oscLegend: HTMLParagraphElement;
     btnConn: HTMLButtonElement;
-    btnAbort: HTMLButtonElement;
-    btnSendT: HTMLButtonElement;
+    btnStart: HTMLButtonElement;
+    btnStop: HTMLButtonElement;
     manualT: HTMLInputElement;
     inflAmp: HTMLInputElement;
     inflMs: HTMLInputElement;
@@ -83,6 +89,22 @@ function mountUi(): {
     rd: HTMLInputElement;
     fs: HTMLInputElement;
     peakMin: HTMLInputElement;
+    cfgSaf: HTMLInputElement;
+    cfgSafHigh: HTMLInputElement;
+    chkHostHigh: HTMLInputElement;
+    btnApplyCfg: HTMLButtonElement;
+    earlyCut: HTMLInputElement;
+    acQuietThr: HTMLInputElement;
+    acQuietMs: HTMLInputElement;
+    marginQuiet: HTMLInputElement;
+    deflateRate: HTMLInputElement;
+    chkEarlyEnd: HTMLInputElement;
+    earlyMinPeaks: HTMLInputElement;
+    earlyBelowDbp: HTMLInputElement;
+    earlyStablePasses: HTMLInputElement;
+    earlyStableTol: HTMLInputElement;
+    uartStatus: HTMLParagraphElement;
+    maaToast: HTMLDivElement;
   };
   proc: MeasurementProcessor;
 } {
@@ -101,10 +123,25 @@ function mountUi(): {
   </p>
   <div class="row-controls">
     <button type="button" class="primary" id="btnConn">Kết nối cổng USB TTL</button>
-    <button type="button" class="danger" id="btnAbort" disabled>Hủy đo (ABORT)</button>
-    <label>SAF test <input type="number" id="manualT" value="300" min="0" max="400" /></label>
-    <button type="button" id="btnSendT" disabled>Gửi T,…</button>
+    <button type="button" class="primary" id="btnStart" disabled>Bắt đầu đo</button>
+    <button type="button" class="danger" id="btnStop" disabled>Dừng</button>
+    <label class="target-inline">Mục tiêu T (mmHg) <input type="number" id="manualT" value="200" min="0" max="400" /></label>
+    <label class="ha-inline"><input type="checkbox" id="chkHostHigh" /> Huyết áp cao (<code>HIGH,1</code>)</label>
   </div>
+  <p class="small-note proto-note">
+    «Bắt đầu đo» gửi <code>START</code> rồi <code>T,…</code> (cần firmware đã cập nhật). MCU trả <code>R,OK,…</code> khi đã parse lệnh.
+    Chỉ gửi <code>T,…</code> khi đang IDLE thì chưa bơm — cần <code>START</code> hoặc nút START trên board.
+  </p>
+  <p class="cmd-hint" id="uartStatus" aria-live="polite">Chưa kết nối.</p>
+  <fieldset class="settings" style="margin-top:0.75rem">
+    <legend>MCU — UART (SAF / HA)</legend>
+    <p class="small-note" style="margin:0 0 0.5rem">
+      SAF / HA cũng được lưu cùng bộ cấu hình host (localStorage) khi đổi ô hoặc checkbox.
+    </p>
+    <label>SAF thường (mmHg) <input type="number" id="cfgSaf" min="120" max="300" step="1" value="175" /></label>
+    <label>SAF chế độ HA (mmHg) <input type="number" id="cfgSafHigh" min="120" max="300" step="1" value="175" /></label>
+    <button type="button" id="btnApplyCfg" disabled>Gửi SAF / SAFH / HIGH</button>
+  </fieldset>
   <p class="small-note" id="annLine">Chưa kết nối.</p>
 
   <div class="grid-results">
@@ -113,10 +150,20 @@ function mountUi(): {
     <div class="card-num"><div class="label">MAP</div><div class="value" id="vMap">—</div></div>
     <div class="card-num"><div class="label">Nhịp tim</div><div class="value" id="vBpm">—</div></div>
   </div>
-  <p class="small-note">
-    Target đã gửi: <span id="sentT">—</span> · Đỉnh bao (đồ thị dưới): <span id="peaks">0</span> ·
-    Áp hiện tại: <span id="cuff">—</span> mmHg
-  </p>
+  <div class="live-stream-stats" role="status" aria-live="polite">
+    <div class="live-stat">
+      <span class="live-stat-label">Target đã gửi</span>
+      <span class="live-stat-value" id="sentT">—</span>
+    </div>
+    <div class="live-stat">
+      <span class="live-stat-label">Đỉnh bao (đồ thị dưới)</span>
+      <span class="live-stat-value" id="peaks">0</span>
+    </div>
+    <div class="live-stat live-stat--cuff">
+      <span class="live-stat-label">Áp hiện tại</span>
+      <span class="live-stat-value"><span id="cuff">—</span><span class="live-stat-unit"> mmHg</span></span>
+    </div>
+  </div>
 
   <p class="chart-caption">Áp suất vòng bít theo thời gian</p>
   <div class="chart-toolbar">
@@ -131,6 +178,9 @@ function mountUi(): {
 
   <fieldset class="settings">
     <legend>Tham số xử lý (host)</legend>
+    <p class="small-note" style="margin:0 0 0.5rem">
+      Giá trị được lưu tự động trong trình duyệt (<code>localStorage</code>) khi bạn thay đổi; F5 hoặc mở lại trang vẫn giữ (cùng origin).
+    </p>
     <label>Ngưỡng dao động bơm chậm <input type="number" id="inflAmp" step="0.1" min="0.2" value="1.2" /></label>
     <label>Duy trì (ms) <input type="number" id="inflMs" step="10" min="50" value="250" /></label>
     <label>Margin T (mmHg) <input type="number" id="margin" step="1" min="10" value="40" /></label>
@@ -138,6 +188,16 @@ function mountUi(): {
     <label>r<sub>d</sub> <input type="number" id="rd" step="0.01" min="0.5" max="0.95" value="0.7" /></label>
     <label>F<sub>s</sub> lọc (Hz) <input type="number" id="fs" step="1" min="50" max="200" value="100" /></label>
     <label>Đỉnh tối thiểu (pha xả) <input type="number" id="peakMin" step="0.05" min="0.05" value="0.35" /></label>
+    <label>Áp cắt sớm (mmHg, 0=tắt) <input type="number" id="earlyCut" min="0" max="250" step="1" value="0" /></label>
+    <label>|AC| &quot;yên&quot; &lt; <input type="number" id="acQuietThr" step="0.05" min="0.05" value="0.35" /></label>
+    <label>Duy trì yên (ms) <input type="number" id="acQuietMs" step="10" min="50" value="400" /></label>
+    <label>Margin T khi cắt sớm <input type="number" id="marginQuiet" min="2" max="40" step="1" value="6" /></label>
+    <label>Tốc độ xả chậm <code>DR</code> (mmHg/s, gửi khi vào pha xả) <input type="number" id="deflateRate" step="0.1" min="0.8" max="4" value="3" /></label>
+    <label class="ha-inline"><input type="checkbox" id="chkEarlyEnd" /> Kết thúc sớm <code>EARLYEND</code> (đủ bao + cuff thấp)</label>
+    <label>Đỉnh tối thiểu (sớm) <input type="number" id="earlyMinPeaks" min="5" max="40" step="1" value="6" /></label>
+    <label>Biên dưới DBP (mmHg) <input type="number" id="earlyBelowDbp" min="5" max="50" step="1" value="15" title="Cuff DC phải ≤ DBP_MAA − giá trị này" /></label>
+    <label>Ổn định MAA (lần, 0=tắt) <input type="number" id="earlyStablePasses" min="0" max="50" step="1" value="0" /></label>
+    <label>Tol ổn định (mmHg) <input type="number" id="earlyStableTol" min="1" max="15" step="1" value="3" /></label>
   </fieldset>
 
   <details class="testing-panel">
@@ -145,13 +205,14 @@ function mountUi(): {
     <ul>
       <li><strong>COM-T01</strong> — Stream <code>S,…</code> ~100 dòng/giây khi đo (quan sát biểu đồ / log).</li>
       <li><strong>COM-T02</strong> — Sau <code>T,…</code> MCU báo <code>A,INFLATE_MARGIN</code> rồi xả đo.</li>
-      <li><strong>SAF-T03</strong> — Gửi <code>T,300</code>: firmware clamp 280 mmHg (nút “Gửi T,…” phía trên).</li>
-      <li><strong>SAF-T04</strong> — Nút Hủy gửi <code>ABORT</code> (tương đương STOP phần cứng về xả).</li>
+      <li><strong>SAF-T03</strong> — Gửi <code>T,300</code>: host + firmware clamp theo SAF đã gửi (mặc định 175 mmHg, nút “Bắt đầu đo”).</li>
+      <li><strong>SAF-T04</strong> — Nút Dừng gửi <code>ABORT</code> (tương đương STOP phần cứng về xả).</li>
     </ul>
   </details>
 
   <h2 class="small-note" style="margin-top:1.25rem">Log UART</h2>
-  <pre class="log-box" id="log"></pre>
+  <pre class="log-box" id="log" aria-live="polite"></pre>
+  <div id="maaToast" class="maa-toast" role="alert" aria-live="assertive" hidden></div>
   `;
 
   const el = <T extends HTMLElement>(id: string) => {
@@ -177,8 +238,8 @@ function mountUi(): {
     chkAc: el<HTMLInputElement>('chkAc'),
     oscLegend: el<HTMLParagraphElement>('oscLegend'),
     btnConn: el<HTMLButtonElement>('btnConn'),
-    btnAbort: el<HTMLButtonElement>('btnAbort'),
-    btnSendT: el<HTMLButtonElement>('btnSendT'),
+    btnStart: el<HTMLButtonElement>('btnStart'),
+    btnStop: el<HTMLButtonElement>('btnStop'),
     manualT: el<HTMLInputElement>('manualT'),
     inflAmp: el<HTMLInputElement>('inflAmp'),
     inflMs: el<HTMLInputElement>('inflMs'),
@@ -187,6 +248,22 @@ function mountUi(): {
     rd: el<HTMLInputElement>('rd'),
     fs: el<HTMLInputElement>('fs'),
     peakMin: el<HTMLInputElement>('peakMin'),
+    cfgSaf: el<HTMLInputElement>('cfgSaf'),
+    cfgSafHigh: el<HTMLInputElement>('cfgSafHigh'),
+    chkHostHigh: el<HTMLInputElement>('chkHostHigh'),
+    btnApplyCfg: el<HTMLButtonElement>('btnApplyCfg'),
+    earlyCut: el<HTMLInputElement>('earlyCut'),
+    acQuietThr: el<HTMLInputElement>('acQuietThr'),
+    acQuietMs: el<HTMLInputElement>('acQuietMs'),
+    marginQuiet: el<HTMLInputElement>('marginQuiet'),
+    deflateRate: el<HTMLInputElement>('deflateRate'),
+    chkEarlyEnd: el<HTMLInputElement>('chkEarlyEnd'),
+    earlyMinPeaks: el<HTMLInputElement>('earlyMinPeaks'),
+    earlyBelowDbp: el<HTMLInputElement>('earlyBelowDbp'),
+    earlyStablePasses: el<HTMLInputElement>('earlyStablePasses'),
+    earlyStableTol: el<HTMLInputElement>('earlyStableTol'),
+    uartStatus: el<HTMLParagraphElement>('uartStatus'),
+    maaToast: el<HTMLDivElement>('maaToast'),
   };
 
   const proc = new MeasurementProcessor();
@@ -194,22 +271,173 @@ function mountUi(): {
   return { els, proc };
 }
 
+/** Lưu trong trình duyệt (localStorage): tham số xử lý, SAF/HIGH, T, hiển thị đồ thị. */
+const HOST_SETTINGS_LS_KEY = 'mpx5050-webapp-host-settings-v1';
+const HOST_SETTINGS_VER = 1 as const;
+
+type HostFormEls = ReturnType<typeof mountUi>['els'];
+
+type HostSettingsV1 = {
+  v: typeof HOST_SETTINGS_VER;
+  manualT: string;
+  inflAmp: string;
+  inflMs: string;
+  margin: string;
+  rs: string;
+  rd: string;
+  fs: string;
+  peakMin: string;
+  earlyCut: string;
+  acQuietThr: string;
+  acQuietMs: string;
+  marginQuiet: string;
+  deflateRate: string;
+  chkEarlyEnd: boolean;
+  earlyMinPeaks: string;
+  earlyBelowDbp: string;
+  earlyStablePasses: string;
+  earlyStableTol: string;
+  cfgSaf: string;
+  cfgSafHigh: string;
+  chkHostHigh: boolean;
+  chkDc: boolean;
+  chkAc: boolean;
+};
+
+function snapshotHostSettings(els: HostFormEls): HostSettingsV1 {
+  return {
+    v: HOST_SETTINGS_VER,
+    manualT: els.manualT.value,
+    inflAmp: els.inflAmp.value,
+    inflMs: els.inflMs.value,
+    margin: els.margin.value,
+    rs: els.rs.value,
+    rd: els.rd.value,
+    fs: els.fs.value,
+    peakMin: els.peakMin.value,
+    earlyCut: els.earlyCut.value,
+    acQuietThr: els.acQuietThr.value,
+    acQuietMs: els.acQuietMs.value,
+    marginQuiet: els.marginQuiet.value,
+    deflateRate: els.deflateRate.value,
+    chkEarlyEnd: els.chkEarlyEnd.checked,
+    earlyMinPeaks: els.earlyMinPeaks.value,
+    earlyBelowDbp: els.earlyBelowDbp.value,
+    earlyStablePasses: els.earlyStablePasses.value,
+    earlyStableTol: els.earlyStableTol.value,
+    cfgSaf: els.cfgSaf.value,
+    cfgSafHigh: els.cfgSafHigh.value,
+    chkHostHigh: els.chkHostHigh.checked,
+    chkDc: els.chkDc.checked,
+    chkAc: els.chkAc.checked,
+  };
+}
+
+function loadHostSettingsIntoForm(els: HostFormEls): void {
+  try {
+    const raw = localStorage.getItem(HOST_SETTINGS_LS_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw) as Partial<HostSettingsV1>;
+    if (s.v !== HOST_SETTINGS_VER) return;
+    if (typeof s.manualT === 'string') els.manualT.value = s.manualT;
+    if (typeof s.inflAmp === 'string') els.inflAmp.value = s.inflAmp;
+    if (typeof s.inflMs === 'string') els.inflMs.value = s.inflMs;
+    if (typeof s.margin === 'string') els.margin.value = s.margin;
+    if (typeof s.rs === 'string') els.rs.value = s.rs;
+    if (typeof s.rd === 'string') els.rd.value = s.rd;
+    if (typeof s.fs === 'string') els.fs.value = s.fs;
+    if (typeof s.peakMin === 'string') els.peakMin.value = s.peakMin;
+    if (typeof s.earlyCut === 'string') els.earlyCut.value = s.earlyCut;
+    if (typeof s.acQuietThr === 'string') els.acQuietThr.value = s.acQuietThr;
+    if (typeof s.acQuietMs === 'string') els.acQuietMs.value = s.acQuietMs;
+    if (typeof s.marginQuiet === 'string') els.marginQuiet.value = s.marginQuiet;
+    if (typeof s.deflateRate === 'string') els.deflateRate.value = s.deflateRate;
+    if (typeof s.chkEarlyEnd === 'boolean') els.chkEarlyEnd.checked = s.chkEarlyEnd;
+    if (typeof s.earlyMinPeaks === 'string') els.earlyMinPeaks.value = s.earlyMinPeaks;
+    if (typeof s.earlyBelowDbp === 'string') els.earlyBelowDbp.value = s.earlyBelowDbp;
+    if (typeof s.earlyStablePasses === 'string') els.earlyStablePasses.value = s.earlyStablePasses;
+    if (typeof s.earlyStableTol === 'string') els.earlyStableTol.value = s.earlyStableTol;
+    if (typeof s.cfgSaf === 'string') els.cfgSaf.value = s.cfgSaf;
+    if (typeof s.cfgSafHigh === 'string') els.cfgSafHigh.value = s.cfgSafHigh;
+    if (typeof s.chkHostHigh === 'boolean') els.chkHostHigh.checked = s.chkHostHigh;
+    if (typeof s.chkDc === 'boolean') els.chkDc.checked = s.chkDc;
+    if (typeof s.chkAc === 'boolean') els.chkAc.checked = s.chkAc;
+  } catch {
+    /* private mode / JSON lỗi */
+  }
+}
+
+let hostSettingsSaveTimer: number | null = null;
+
+function schedulePersistHostSettings(els: HostFormEls): void {
+  if (hostSettingsSaveTimer !== null) window.clearTimeout(hostSettingsSaveTimer);
+  hostSettingsSaveTimer = window.setTimeout(() => {
+    hostSettingsSaveTimer = null;
+    try {
+      localStorage.setItem(HOST_SETTINGS_LS_KEY, JSON.stringify(snapshotHostSettings(els)));
+    } catch {
+      /* hết quota */
+    }
+  }, 350);
+}
+
+let maaToastDismissTimer = 0;
+let maaToastHideTimer = 0;
+
+function showMaaToast(el: HTMLDivElement, message: string): void {
+  el.textContent = message;
+  el.hidden = false;
+  el.classList.add('maa-toast--visible');
+  window.clearTimeout(maaToastDismissTimer);
+  window.clearTimeout(maaToastHideTimer);
+  maaToastDismissTimer = window.setTimeout(() => {
+    el.classList.remove('maa-toast--visible');
+    maaToastHideTimer = window.setTimeout(() => {
+      el.hidden = true;
+    }, 280);
+  }, 9000);
+}
+
 function appendLog(pre: HTMLPreElement, line: string, maxLines = 80): void {
   const rows = (pre.textContent ?? '').split('\n').filter(Boolean);
   rows.push(line);
   while (rows.length > maxLines) rows.shift();
   pre.textContent = rows.join('\n');
+  pre.scrollTop = pre.scrollHeight;
 }
 
-async function writeCmd(port: SerialPort, text: string, log: HTMLPreElement): Promise<void> {
+async function writeCmd(
+  port: SerialPort,
+  text: string,
+  log: HTMLPreElement,
+  statusEl?: HTMLParagraphElement,
+): Promise<void> {
   const w = port.writable;
   if (!w) return;
-  const writer = w.getWriter();
+  let writer: WritableStreamDefaultWriter<Uint8Array>;
+  try {
+    writer = w.getWriter();
+  } catch (e) {
+    appendLog(log, `[TX getWriter] ${String(e)}`);
+    if (statusEl) statusEl.textContent = `Lỗi mở writer UART: ${String(e)}`;
+    return;
+  }
   try {
     await writer.write(new TextEncoder().encode(text));
     appendLog(log, `→ TX ${text.replace(/\n/g, '\\n')}`);
+    if (statusEl) {
+      const oneLine = text.replace(/\s+/g, ' ').trim();
+      statusEl.textContent = `Đã gửi: ${oneLine} — chờ MCU (dòng R,OK,… trong log).`;
+    }
+  } catch (e) {
+    appendLog(log, `[TX lỗi] ${String(e)}`);
+    if (statusEl) statusEl.textContent = `Lỗi gửi UART: ${String(e)}`;
   } finally {
-    writer.releaseLock();
+    try {
+      writer.releaseLock();
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -217,10 +445,18 @@ function createLineHandler(ctx: {
   proc: MeasurementProcessor;
   port: () => SerialPort | null;
   log: HTMLPreElement;
+  uartStatus: HTMLParagraphElement;
   onSample: (tMs: number, pMmHg: number) => void;
+  clampSaf: () => number;
+  /** Một writer Serial tại một thời điểm — xếp hàng mọi TX phát sinh từ dòng `S`. */
+  enqueueSerialTx: (task: () => Promise<void>) => void;
 }) {
   return function handleParsedLine(line: ParsedLine): void {
     if (line.tag === 'unknown' && line.raw) appendLog(ctx.log, line.raw);
+    if (line.tag === 'R') {
+      appendLog(ctx.log, `← R,${line.payload}`);
+      ctx.uartStatus.textContent = `MCU xác nhận: R,${line.payload}`;
+    }
     if (line.tag === 'A') {
       appendLog(ctx.log, `A,${line.code}`);
       ctx.proc.onAnnunciation(line.code);
@@ -231,10 +467,25 @@ function createLineHandler(ctx: {
     }
 
     if (line.tag === 'S') {
-      const tgt = ctx.proc.ingestSample(line.tMs, line.pMmHg);
+      if (line.fsm !== undefined) ctx.proc.syncPhaseFromMcuFsm(line.fsm);
+      const r = ctx.proc.ingestSample(line.tMs, line.pMmHg);
       ctx.onSample(line.tMs, line.pMmHg);
       const p = ctx.port();
-      if (tgt !== null && p?.writable) void writeCmd(p, formatTargetCommand(tgt), ctx.log);
+      if (p?.writable && (r.extraTx.length > 0 || r.targetMmHg !== null)) {
+        const extra = r.extraTx.slice();
+        const tgt = r.targetMmHg;
+        const cap = ctx.clampSaf();
+        ctx.enqueueSerialTx(async () => {
+          const portNow = ctx.port();
+          if (!portNow?.writable) return;
+          for (const tx of extra) {
+            await writeCmd(portNow, tx, ctx.log, ctx.uartStatus);
+          }
+          if (tgt !== null) {
+            await writeCmd(portNow, formatTargetCommand(tgt, cap), ctx.log, ctx.uartStatus);
+          }
+        });
+      }
     }
   };
 }
@@ -292,8 +543,38 @@ function drawOscBpMarkers(u: uPlot): void {
 
 function main(): void {
   const { els, proc } = mountUi();
+  loadHostSettingsIntoForm(els);
+
+  function effectiveSafFromForm(): number {
+    const raw = els.chkHostHigh.checked ? Number(els.cfgSafHigh.value) : Number(els.cfgSaf.value);
+    if (!Number.isFinite(raw)) return SAF_DEFAULT_MMHG;
+    return clampUartSafMmhg(raw);
+  }
+
+  async function pushMcuUartConfig(p: SerialPort): Promise<void> {
+    await uartQueueFlush();
+    enqueueSerialTx(async () => {
+      if (!p.writable) return;
+      await writeCmd(p, formatSafCommand(Number(els.cfgSaf.value)), els.log, els.uartStatus);
+      await writeCmd(p, formatSafHighCommand(Number(els.cfgSafHigh.value)), els.log, els.uartStatus);
+      await writeCmd(p, formatHighUartCommand(els.chkHostHigh.checked), els.log, els.uartStatus);
+    });
+    await uartQueueFlush();
+  }
 
   let port: SerialPort | null = null;
+  /** Tuần tự hóa mọi ghi Web Serial — tránh nhiều `getWriter()` đồng thời (MCU đầy buffer → treo). */
+  let uartTxChain: Promise<void> = Promise.resolve();
+
+  function enqueueSerialTx(task: () => Promise<void>): void {
+    uartTxChain = uartTxChain.then(task).catch((e) => {
+      appendLog(els.log, `[UART TX hàng đợi] ${String(e)}`);
+    });
+  }
+
+  async function uartQueueFlush(): Promise<void> {
+    await uartTxChain.catch(() => {});
+  }
 
   const xs: number[] = [];
   const ys: number[] = [];
@@ -308,6 +589,7 @@ function main(): void {
     plotHandle.setSeries(2, { show: els.chkDc.checked }, false);
     plotHandle.setSeries(3, { show: els.chkAc.checked }, false);
     plotHandle.redraw();
+    schedulePersistHostSettings(els);
   }
 
   function resizePlot(): void {
@@ -333,6 +615,7 @@ function main(): void {
               ],
             },
           },
+          // uPlot Axis.Side: Top=0, Right=1, Bottom=2, Left=3 (not the common 0=bottom convention).
           axes: [
             { stroke: '#8b93a5', grid: { stroke: '#2a3140' }, label: 's' },
             {
@@ -340,14 +623,14 @@ function main(): void {
               grid: { stroke: '#2a3140' },
               scale: 'y',
               label: 'mmHg',
-              side: 2,
+              side: 3,
             },
             {
               stroke: '#c9a227',
               grid: { show: false },
               scale: 'ac',
               label: '|AC|',
-              side: 3,
+              side: 1,
             },
           ],
           series: [
@@ -422,7 +705,7 @@ function main(): void {
             ],
           },
         },
-        [[280, 40], [0, 0]],
+        [[175, 40], [0, 0]],
         els.chartOscHost,
       );
     } else {
@@ -445,7 +728,7 @@ function main(): void {
       yp = [yp[0], yp[0]];
     }
     if (xp.length === 0) {
-      xp = [280, 40];
+      xp = [175, 40];
       yp = [0, 0];
     }
 
@@ -487,9 +770,8 @@ function main(): void {
     const x = (_tMs - t0Ms) / 1000;
     xs.push(x);
     ys.push(p);
-    const snap = proc.snapshot();
-    ysDc.push(snap.dcMmHg);
-    ysAc.push(Math.abs(snap.bpFiltered));
+    ysDc.push(proc.dcMmHg);
+    ysAc.push(Math.abs(proc.bpFiltered));
     while (xs.length > ROLL_SAMPLES) {
       xs.shift();
       ys.shift();
@@ -503,7 +785,10 @@ function main(): void {
     proc,
     port: () => port,
     log: els.log,
+    uartStatus: els.uartStatus,
     onSample: pushSample,
+    clampSaf: effectiveSafFromForm,
+    enqueueSerialTx,
   });
 
   function applySettingsFromForm(): void {
@@ -515,7 +800,19 @@ function main(): void {
       rd: Number(els.rd.value),
       sampleFs: Number(els.fs.value),
       peakMinAmp: Number(els.peakMin.value),
+      effectiveSafMmHg: effectiveSafFromForm(),
+      earlyCutoffMmHg: Number(els.earlyCut.value),
+      acQuietThreshold: Number(els.acQuietThr.value),
+      acQuietMs: Number(els.acQuietMs.value),
+      marginSmallQuietMmHg: Number(els.marginQuiet.value),
+      deflateSlowRateMmHgS: Number(els.deflateRate.value),
+      earlyEndEnabled: els.chkEarlyEnd.checked,
+      earlyEndMinPeaks: Number(els.earlyMinPeaks.value),
+      earlyEndBelowDbpMmHg: Number(els.earlyBelowDbp.value),
+      earlyEndStablePasses: Number(els.earlyStablePasses.value),
+      earlyEndStableTolMmHg: Number(els.earlyStableTol.value),
     });
+    schedulePersistHostSettings(els);
   }
 
   for (const el of [
@@ -526,14 +823,40 @@ function main(): void {
     els.rd,
     els.fs,
     els.peakMin,
+    els.cfgSaf,
+    els.cfgSafHigh,
+    els.chkHostHigh,
+    els.earlyCut,
+    els.acQuietThr,
+    els.acQuietMs,
+    els.marginQuiet,
+    els.deflateRate,
+    els.chkEarlyEnd,
+    els.earlyMinPeaks,
+    els.earlyBelowDbp,
+    els.earlyStablePasses,
+    els.earlyStableTol,
   ]) {
     el.addEventListener('change', applySettingsFromForm);
   }
+
+  els.manualT.addEventListener('change', () => schedulePersistHostSettings(els));
+
+  els.chkHostHigh.addEventListener('change', async () => {
+    if (!port?.writable) return;
+    try {
+      await pushMcuUartConfig(port);
+    } catch (e) {
+      appendLog(els.log, `[Cảnh báo gửi HIGH/SAF] ${String(e)}`);
+    }
+  });
 
   els.chkDc.addEventListener('change', applySeriesVisibility);
   els.chkAc.addEventListener('change', applySeriesVisibility);
 
   applySettingsFromForm();
+
+  let lastMaaToastNonce = 0;
 
   function refreshLabels(): void {
     const s = proc.snapshot();
@@ -552,6 +875,11 @@ function main(): void {
     els.peaks.textContent = `${s.peaksCaptured}`;
     els.cuff.textContent = s.cuffMmHg.toFixed(1);
 
+    if (s.maaFailureNonce > lastMaaToastNonce && s.maaFailureMessage) {
+      lastMaaToastNonce = s.maaFailureNonce;
+      showMaaToast(els.maaToast, s.maaFailureMessage);
+    }
+
     refreshOscPlot();
   }
 
@@ -566,16 +894,24 @@ function main(): void {
   async function disconnect(): Promise<void> {
     stopUiPoll();
     try {
+      await uartQueueFlush();
+    } catch {
+      /* ignore */
+    }
+    uartTxChain = Promise.resolve();
+    try {
       await port?.close();
     } catch {
       /* ignore */
     }
     port = null;
     els.btnConn.disabled = false;
-    els.btnAbort.disabled = true;
-    els.btnSendT.disabled = true;
+    els.btnStart.disabled = true;
+    els.btnStop.disabled = true;
+    els.btnApplyCfg.disabled = true;
     els.btnConn.textContent = 'Kết nối cổng USB TTL';
     appendLog(els.log, '[Đã ngắt kết nối]');
+    els.uartStatus.textContent = 'Đã ngắt kết nối.';
   }
 
   els.btnConn.addEventListener('click', async () => {
@@ -609,9 +945,17 @@ function main(): void {
     applySettingsFromForm();
 
     els.btnConn.textContent = 'Ngắt kết nối';
-    els.btnAbort.disabled = false;
-    els.btnSendT.disabled = false;
+    els.btnStart.disabled = false;
+    els.btnStop.disabled = false;
+    els.btnApplyCfg.disabled = false;
     appendLog(els.log, '[Đã kết nối 115200 8N1]');
+    els.uartStatus.textContent = 'Đã kết nối — log dưới cùng: → TX và ← R,OK,…';
+
+    try {
+      await pushMcuUartConfig(port);
+    } catch (e) {
+      appendLog(els.log, `[Cảnh báo gửi SAF/HIGH] ${String(e)}`);
+    }
 
     resizePlot();
     resizeOscPlot();
@@ -633,17 +977,35 @@ function main(): void {
     });
   });
 
-  els.btnAbort.addEventListener('click', async () => {
+  els.btnStop.addEventListener('click', async () => {
     if (!port?.writable) return;
-    await writeCmd(port, formatAbortCommand(), els.log);
+    await uartQueueFlush();
+    enqueueSerialTx(async () => {
+      const p = port;
+      if (!p?.writable) return;
+      await writeCmd(p, formatAbortCommand(), els.log, els.uartStatus);
+    });
   });
 
-  els.btnSendT.addEventListener('click', async () => {
+  els.btnStart.addEventListener('click', async () => {
     if (!port?.writable) return;
     const raw = Number(els.manualT.value);
-    const clamped = clampTargetMmhg(raw);
-    await writeCmd(port, formatTargetCommand(raw), els.log);
+    const cap = effectiveSafFromForm();
+    const clamped = clampTargetMmhg(raw, cap);
+    await uartQueueFlush();
+    enqueueSerialTx(async () => {
+      const p = port;
+      if (!p?.writable) return;
+      await writeCmd(p, formatStartCommand(), els.log, els.uartStatus);
+      await writeCmd(p, formatTargetCommand(raw, cap), els.log, els.uartStatus);
+    });
     if (raw !== clamped) appendLog(els.log, `[SAF] clamp host → ${clamped} mmHg`);
+  });
+
+  els.btnApplyCfg.addEventListener('click', async () => {
+    if (!port?.writable) return;
+    await pushMcuUartConfig(port);
+    applySettingsFromForm();
   });
 
   resizeOscPlot();

@@ -1,0 +1,15 @@
+%===============================================================
+% tomtat.tex — Tóm tắt đề tài
+%===============================================================
+\begin{center}
+	\textbf{{\Large\textcolor{black}{TÓM TẮT ĐỀ TÀI}}}
+\end{center}
+
+\vspace{1cm}
+
+\hspace*{2cm}
+Đề tài trình bày thiết kế một máy đo huyết áp điện tử theo phương pháp \textit{oscillometric}: áp suất trong băng được đo bằng cảm biến áp tuyến tính NXP MPX5050, chuyển đổi tương tự--số qua ADC ngoài Texas Instruments ADS1115 giao tiếp I\textsuperscript{2}C với vi điều khiển STM32F103 (Blue Pill). Firmware điều khiển bơm và van bằng PWM để bơm chậm, ramp đến mục tiêu và xả chậm trong khi đo; đồng thời truyền dòng dữ liệu áp suất khoảng 100 mẫu/giây qua UART (115200~bps) về máy tính.
+
+Phần mềm host (WebApp Vite + TypeScript, Web Serial trên Chrome/Edge) lọc số dải thông 0{,}5--5~Hz, ước lượng áp tâm thu đại diện trong pha bơm chậm để gửi lệnh đặt áp mục tiêu \texttt{T,<mmHg>} xuống MCU; trong pha xả, máy chủ tạo đường bao dao động và áp dụng thuật toán biên độ cực đại (MAA) với các hệ số đặc trưng \(r_s\), \(r_d\) để suy ra MAP, SBP và DBP. Hệ thống có cơ chế an toàn cục bộ: trần áp 280~mmHg, dừng khẩn cấp nút cứng và lệnh \texttt{ABORT}, báo hiệu LED (đỏ/vàng/xanh) theo trạng thái đo.
+
+Kết quả là một nguyên mẫu phần cứng--phần mềm thống nhất phục vụ đo và hiển thị trên trình duyệt; độ chính xác lâm sàng phụ thuộc hiệu chỉnh cảm biến và tinh chỉnh tham số MAA, được nêu trong kết luận và hướng phát triển.

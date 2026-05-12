@@ -102,7 +102,7 @@ Dưới đây là bộ **Testcase toàn diện (Hardware Bring-up & Functional T
 
 | **SAF-01** | Bấm dừng khẩn cấp | Đang bơm nửa chừng (hoặc đang xả), nhấn nút `SW_STOP`. | Bơm TẮT NGAY LẬP TỨC. Van MỞ 100% ngay lập tức. Đèn Red chớp báo hiệu. |
 
-| **SAF-02** | Cắt quá áp bằng Firmware | Ghi đè code bơm liên tục. Chặn không cho van xả. | Khi áp suất ADC đọc được vượt quá **280 mmHg**, Firmware phải tự động ngắt Bơm và mở Van 100% (Safety Limit). |
+| **SAF-02** | Cắt quá áp bằng Firmware | Ghi đè code bơm liên tục. Chặn không cho van xả. | Khi áp suất ADC vượt **trần SAF hiệu lực** (mặc định 175 mmHg; có thể đổi UART `SAF` / `SAFH`), Firmware phải tự động ngắt Bơm và mở Van 100% (Safety Limit). |
 
 | **SAF-03** | Lỗi hở vòng bít (Timeout) | Không cắm vòng bít vào máy. Nhấn Start. | Bơm chạy nhưng áp suất ADC không tăng. Sau 10 giây (Timeout), hệ thống báo lỗi hở khí, tự tắt bơm. |
 
