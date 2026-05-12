@@ -24,6 +24,15 @@
 #define PUMP_PWM_MIN                     5u
 #define PUMP_PWM_MAX                     100u
 
+/* --- Soft-start chống brownout do dòng inrush motor bơm ---
+ * Trong PUMP_SOFTSTART_MS đầu tiên sau khi rời IDLE, kẹp PWM ≤
+ * PUMP_SOFTSTART_CAP_PCT để dòng đỉnh không kéo sụt rail VCC.
+ * Đồng thời mọi thay đổi pump_pwm trong các state INFLATE bị cap
+ * theo PUMP_SLOPE_PER_TICK_MAX (đơn vị %/tick @100Hz). */
+#define PUMP_SOFTSTART_MS                500u
+#define PUMP_SOFTSTART_CAP_PCT           30u
+#define PUMP_SLOPE_PER_TICK_MAX          1
+
 #define VALVE_CLOSED_DUTY                0u
 #define VALVE_FULL_OPEN_DUTY             100u
 

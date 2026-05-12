@@ -78,9 +78,11 @@ extern "C" void uart_proto_poll_rx(void)
 }
 
 extern "C" void uart_proto_send_sample(uint32_t seq, uint32_t t_ms, float p_mmhg,
-                                       int rc, int16_t counts)
+                                       int rc, int16_t counts,
+                                       int fsm, int pump_pct, int valve_pct,
+                                       int btn_s, int btn_p, int btn_h)
 {
-    char line[80];
+    char line[112];
     /* Tránh %f: newlib nano trên STM32 thường không link printf float → mmHg bị trống. */
     float p = p_mmhg;
     int sign = (p < 0.f) ? -1 : 1;
@@ -88,14 +90,17 @@ extern "C" void uart_proto_send_sample(uint32_t seq, uint32_t t_ms, float p_mmhg
     if (pa > 500.f)
         pa = 500.f;
     unsigned long cents = (unsigned long)(pa * 100.f + 0.5f);
-    /* Bổ sung rc và counts ở cuối: S,<seq>,<t_ms>,<p_mmhg>,<rc>,<counts>
-     * → mỗi dòng đều thấy ADC thô, không cần ngó dòng D,... rời (đã bỏ).
-     * In luôn dấu '-' nếu p âm để biết đang bị clip vì lý do gì. */
-    int n = snprintf(line, sizeof(line), "S,%lu,%lu,%s%lu.%02lu,%d,%d\r\n",
+    /* Full debug line: in cả fsm/pump/valve/buttons mỗi tick để chẩn đoán
+     * vì sao bấm START mà motor không bơm (state có chuyển không, PWM có
+     * lên không, nút STOP có bị stuck low không). */
+    int n = snprintf(line, sizeof(line),
+                     "S,%lu,%lu,%s%lu.%02lu,%d,%d,%d,%d,%d,%d%d%d\r\n",
                      (unsigned long)seq, (unsigned long)t_ms,
                      (sign < 0) ? "-" : "",
                      cents / 100UL, cents % 100UL,
-                     rc, (int)counts);
+                     rc, (int)counts,
+                     fsm, pump_pct, valve_pct,
+                     btn_s ? 1 : 0, btn_p ? 1 : 0, btn_h ? 1 : 0);
     if (n > 0)
         Serial.write((const uint8_t *)line, (size_t)n);
 }
