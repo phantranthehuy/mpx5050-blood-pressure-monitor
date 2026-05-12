@@ -5,6 +5,8 @@
 #include <Arduino.h>
 #include <HardwareTimer.h>
 #include <Wire.h>
+#include <stdio.h>
+#include <string.h>
 
 extern "C" {
 #include "board_config.h"
@@ -55,9 +57,53 @@ void setup(void)
     Wire.setSCL(PIN_I2C_SCL);
     Wire.setSDA(PIN_I2C_SDA);
     Wire.begin();
-    Wire.setClock(400000);
+    Wire.setClock(100000); /* tạm hạ xuống 100 kHz khi debug bus */
 
     uart_proto_init();
+
+    /* --- DEBUG: I2C scanner.
+     * Quét bus → lưu kết quả vào buffer → in lặp mỗi 1 s cho tới khi user
+     * gõ bất kỳ phím nào trên monitor (Enter), rồi mới chạy app.
+     * Mục đích: tránh dòng `S,...` trôi mất kết quả scan trước khi mở monitor.
+     */
+    delay(200);
+    char scan_summary[256];
+    int sp = 0;
+    sp += snprintf(scan_summary + sp, sizeof(scan_summary) - sp,
+                   "I2C scan @100kHz on PB6/PB7: ");
+    uint8_t found = 0;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        uint8_t err = Wire.endTransmission();
+        if (err == 0) {
+            sp += snprintf(scan_summary + sp, sizeof(scan_summary) - sp,
+                           "0x%02X ", addr);
+            found++;
+            if (sp > (int)sizeof(scan_summary) - 16) break;
+        }
+    }
+    sp += snprintf(scan_summary + sp, sizeof(scan_summary) - sp,
+                   "(total=%u)", (unsigned)found);
+
+    /* Drain rác có sẵn trong RX */
+    while (Serial.available() > 0) (void)Serial.read();
+
+    /* In lặp lại tới khi nhận 1 byte từ monitor */
+    uint32_t last_print = 0;
+    for (;;) {
+        uint32_t t = millis();
+        if (t - last_print >= 1000u || last_print == 0u) {
+            last_print = t;
+            Serial.println();
+            Serial.println(scan_summary);
+            Serial.println(">>> Mo Serial Monitor, go Enter (gui 1 byte) de bat dau stream <<<");
+        }
+        if (Serial.available() > 0) {
+            while (Serial.available() > 0) (void)Serial.read();
+            break;
+        }
+    }
+    Serial.println("Streaming...");
 
     ads1115_init(&g_ads);
 
@@ -91,13 +137,23 @@ void loop(void)
     int high = digitalRead(PIN_BTN_HIGH) == LOW ? 1 : 0;
 
     int16_t counts = 0;
-    if (ads1115_read_channel0_counts(&g_ads, &counts) != 0)
+    int rc = ads1115_read_channel0_counts(&g_ads, &counts);
+    if (rc != 0)
         bp_fsm_sensor_i2c_fail();
     else
         bp_fsm_sensor_i2c_ok();
 
     float p_mmhg = pressure_counts_to_mmhg(counts);
     uint32_t now = millis();
+
+    /* --- DEBUG: in counts thô + rc mỗi 200 ms để dễ đọc trên Serial monitor --- */
+    static uint32_t dbg_last = 0;
+    if (now - dbg_last >= 200u) {
+        dbg_last = now;
+        char b[48];
+        snprintf(b, sizeof(b), "D,rc=%d,counts=%d\r\n", rc, (int)counts);
+        Serial.write((const uint8_t *)b, strlen(b));
+    }
 
     bp_fsm_on_tick(now, p_mmhg, start, stop, high);
 
