@@ -97,6 +97,32 @@ static float clampf(float x, float lo, float hi)
     return x;
 }
 
+/* Ramp pump_pwm về phía `target` với 2 giới hạn:
+ *   (1) slope cap ±PUMP_SLOPE_PER_TICK_MAX %/tick → tránh đỉnh dòng motor;
+ *   (2) trong PUMP_SOFTSTART_MS đầu sau khi vào INFLATE, kẹp ≤ PUMP_SOFTSTART_CAP_PCT.
+ * Trả về giá trị mới đã ghi vào pump_pwm. */
+static uint8_t ramp_pump_to(int target_pct, uint32_t now_ms)
+{
+    if (target_pct < (int)PUMP_PWM_MIN) target_pct = (int)PUMP_PWM_MIN;
+    if (target_pct > (int)PUMP_PWM_MAX) target_pct = (int)PUMP_PWM_MAX;
+
+    int cur = (int)pump_pwm;
+    int delta = target_pct - cur;
+    int slope = (int)PUMP_SLOPE_PER_TICK_MAX;
+    if (delta > slope) delta = slope;
+    if (delta < -slope) delta = -slope;
+    int np = cur + delta;
+
+    if ((now_ms - inflate_enter_ms) < PUMP_SOFTSTART_MS) {
+        if (np > (int)PUMP_SOFTSTART_CAP_PCT)
+            np = (int)PUMP_SOFTSTART_CAP_PCT;
+    }
+    if (np < (int)PUMP_PWM_MIN) np = (int)PUMP_PWM_MIN;
+    if (np > (int)PUMP_PWM_MAX) np = (int)PUMP_PWM_MAX;
+    pump_pwm = (uint8_t)np;
+    return pump_pwm;
+}
+
 void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
                     int start_pressed, int stop_pressed, int high_pressed)
 {
@@ -144,7 +170,9 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
             host_target_pending = 0;
             float fb = INFLATE_FALLBACK_TARGET_MMHG + (high_mode ? 15.f : 0.f);
             inflate_target_mmhg = clampf(fb, 40.f, PRESSURE_SAFE_MAX_MMHG - 5.f);
-            pump_pwm = PUMP_PWM_MIN + 10u;
+            /* Soft-start: bắt đầu ở PUMP_PWM_MIN, các tick sau ramp_pump_to() sẽ
+             * nhích lên theo slope cap. Tránh kick 15 % gây sụt áp tức thời. */
+            pump_pwm = PUMP_PWM_MIN;
             valve_pwm = VALVE_CLOSED_DUTY;
         }
         break;
@@ -152,18 +180,18 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
     case BP_STATE_INFLATE_SLOW_LISTEN: {
         valve_pwm = VALVE_CLOSED_DUTY;
 
-        /* Chờ WebApp gửi T,... → chuyển margin */
+        /* Chờ WebApp gửi T,... → chuyển margin (slope cap vẫn áp khi sang state mới) */
         if (host_target_pending) {
             host_target_pending = 0;
             state = BP_STATE_INFLATE_TO_MARGIN;
-            pump_pwm = clampf((float)pump_pwm + 25.f, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
+            ramp_pump_to((int)pump_pwm + 25, now_ms);
             break;
         }
 
         /* Fallback: timeout chờ lệnh */
         if ((now_ms - inflate_enter_ms) > INFLATE_FALLBACK_AFTER_MS) {
             state = BP_STATE_INFLATE_TO_MARGIN;
-            pump_pwm = clampf((float)pump_pwm + 20.f, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
+            ramp_pump_to((int)pump_pwm + 20, now_ms);
             break;
         }
 
@@ -175,16 +203,14 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
             }
         }
 
-        /* Servo ~TARGET_PRESSURE_RATE_MMHG_S */
+        /* Servo ~TARGET_PRESSURE_RATE_MMHG_S — target tuyệt đối, ramp_pump_to() cap slope */
         float err = TARGET_PRESSURE_RATE_MMHG_S - dp_dt;
-        int adj = (int)(err * 2.f);
-        int np = (int)pump_pwm + adj;
-        np = (int)clampf((float)np, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
-        pump_pwm = (uint8_t)np;
+        int target = (int)pump_pwm + (int)(err * 2.f);
+        ramp_pump_to(target, now_ms);
 
-        /* Quá chậm trong thời gian dài → tăng PWM nhẹ */
+        /* Quá chậm trong thời gian dài → nâng nhẹ (vẫn qua slope cap) */
         if (dp_dt < 2.f && (now_ms - inflate_enter_ms) > 3000u)
-            pump_pwm = (uint8_t)clampf((float)pump_pwm + 1.f, (float)PUMP_PWM_MIN, (float)PUMP_PWM_MAX);
+            ramp_pump_to((int)pump_pwm + 1, now_ms);
 
         break;
     }
@@ -199,10 +225,10 @@ void bp_fsm_on_tick(uint32_t now_ms, float pressure_mmhg,
             break;
         }
 
-        /* Bơm nhanh hơn slow-listen */
+        /* Bơm nhanh hơn slow-listen, nhưng vẫn qua slope cap để không nhảy 55 % ngay */
         float err = (inflate_target_mmhg - pressure_mmhg);
-        uint8_t fast = (uint8_t)clampf(55.f + err * 1.5f, 35.f, (float)PUMP_PWM_MAX);
-        pump_pwm = fast;
+        int target = (int)clampf(55.f + err * 1.5f, 35.f, (float)PUMP_PWM_MAX);
+        ramp_pump_to(target, now_ms);
 
         /* Không vượt SAF — đã check đầu tick */
         break;
