@@ -7,14 +7,16 @@ Project **STM32Cube / CMake** (HAL): đọc áp **ADS1115** (I2C), điều khi�
 Cần **CMake ≥ 3.22**, **GNU Arm Embedded Toolchain** (`arm-none-eabi-gcc`), và **Git** (lần cấu hình đầu CMake sẽ clone HAL/CMSIS vào `third_party/`).
 
 ```bash
-cd Firmware
+cd firmware/stm32-hal-cmake
 cmake --preset Debug
 cmake --build build/Debug
 ```
 
 File nhị phân: `build/Debug/bp_monitor.bin`, ELF `build/Debug/bp_monitor`.
 
-**STM32CubeIDE for VS Code:** mở folder `Firmware`, chọn preset **Debug** hoặc **Release**, chạy CMake configure/build trong extension theo [First project creation](https://dev.st.com/stm32cube-docs/stm32cubeide-vscode/1.0.1/en/docs/markup/getting_started/first_project_creation.html).
+**STM32CubeIDE for VS Code:** mở folder `firmware/stm32-hal-cmake`, chọn preset **Debug** hoặc **Release**, chạy CMake configure/build trong extension theo [First project creation](https://dev.st.com/stm32cube-docs/stm32cubeide-vscode/1.0.1/en/docs/markup/getting_started/first_project_creation.html).
+
+**Bản Arduino (PlatformIO, thư viện Wire/Serial):** xem [`../stm32-arduino-pio/README.md`](../stm32-arduino-pio/README.md).
 
 **Nạp chip:** dùng `stm32flash`, OpenOCD, hoặc STM32CubeProgrammer tới địa chỉ flash `0x08000000`, ví dụ:
 

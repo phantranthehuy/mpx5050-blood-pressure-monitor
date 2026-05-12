@@ -61,7 +61,7 @@ Khi bạn thấy tính năng mình làm trên nhánh cá nhân đã hoàn hảo 
 ---
 
 ## ⚠️ 3 Lời thề "Xương Máu" của nhóm
-1. **Không động vào đồ của nhau:** Tùng chỉ sửa file trong thư mục `/Firmware`. Huy chỉ sửa file trong `/Hardware`. Như vậy KHÔNG BAO GIỜ bị xung đột (Conflict).
+1. **Không động vào đồ của nhau:** Tùng chỉ sửa file trong `firmware/stm32-hal-cmake/` (CMake+HAL) và/hoặc `firmware/stm32-arduino-pio/` (PlatformIO Arduino). Huy chỉ sửa file trong `/Hardware`. Như vậy KHÔNG BAO GIỜ bị xung đột (Conflict).
 2. **Commit thường xuyên:** Đừng để 1 tuần mới Commit 1 lần. Cứ làm xong 1 tính năng nhỏ, chạy thử thấy OK là Commit ngay.
 3. **Mạch phần cứng (Huy & Ly chú ý):** Git không thể trộn (merge) file bản vẽ mạch `.PcbDoc` hay file cơ khí 3D. Nên mỗi khi vẽ xong, ngoài file gốc, hãy xuất thêm 1 file **PDF (cho mạch)** hoặc **ảnh chụp màn hình** đẩy lên cùng để Hoàng và Tùng có thể xem chân cắm (Pinout) mà không cần cài Altium.
 
