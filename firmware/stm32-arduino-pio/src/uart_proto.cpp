@@ -80,8 +80,15 @@ extern "C" void uart_proto_poll_rx(void)
 extern "C" void uart_proto_send_sample(uint32_t seq, uint32_t t_ms, float p_mmhg)
 {
     char line[48];
-    int n = snprintf(line, sizeof(line), "S,%lu,%lu,%.2f\r\n",
-                     (unsigned long)seq, (unsigned long)t_ms, p_mmhg);
+    /* Tránh %f: newlib nano trên STM32 thường không link printf float → mmHg bị trống. */
+    float p = p_mmhg;
+    if (p < 0.f)
+        p = 0.f;
+    else if (p > 500.f)
+        p = 500.f;
+    unsigned long cents = (unsigned long)(p * 100.f + 0.5f);
+    int n = snprintf(line, sizeof(line), "S,%lu,%lu,%lu.%02lu\r\n",
+                     (unsigned long)seq, (unsigned long)t_ms, cents / 100UL, cents % 100UL);
     if (n > 0)
         Serial.write((const uint8_t *)line, (size_t)n);
 }

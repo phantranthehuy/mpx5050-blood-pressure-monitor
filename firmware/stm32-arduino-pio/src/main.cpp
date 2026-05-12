@@ -101,12 +101,8 @@ void loop(void)
 
     bp_fsm_on_tick(now, p_mmhg, start, stop, high);
 
-    uart_proto_send_sample(g_seq++, now, p_mmhg);
-
-    apply_pwm_outputs();
-    led_hmi_task(bp_fsm_led_hmi_state());
-
     BpState stt = bp_fsm_get_state();
+    /* Gửi A/E trước S trong cùng tick đổi trạng thái — dễ thấy trên monitor/plotter. */
     if (stt != g_prev_state) {
         if (stt == BP_STATE_INFLATE_SLOW_LISTEN)
             uart_proto_send_line("A,INFLATE_SLOW\r\n");
@@ -123,5 +119,11 @@ void loop(void)
         else if (stt == BP_STATE_IDLE && g_prev_state != BP_STATE_IDLE)
             uart_proto_send_line("A,IDLE\r\n");
     }
+
+    uart_proto_send_sample(g_seq++, now, p_mmhg);
+
+    apply_pwm_outputs();
+    led_hmi_task(bp_fsm_led_hmi_state());
+
     g_prev_state = stt;
 }

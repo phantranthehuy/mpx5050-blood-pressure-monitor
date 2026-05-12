@@ -77,8 +77,15 @@ void uart_proto_init(UART_HandleTypeDef *huart)
 void uart_proto_send_sample(uint32_t seq, uint32_t t_ms, float p_mmhg)
 {
     char line[48];
-    int n = snprintf(line, sizeof(line), "S,%lu,%lu,%.2f\r\n",
-                     (unsigned long)seq, (unsigned long)t_ms, p_mmhg);
+    /* Tránh %f với newlib nano (printf float thường tắt) — mmHg in bằng số nguyên (×100). */
+    float p = p_mmhg;
+    if (p < 0.f)
+        p = 0.f;
+    else if (p > 500.f)
+        p = 500.f;
+    unsigned long cents = (unsigned long)(p * 100.f + 0.5f);
+    int n = snprintf(line, sizeof(line), "S,%lu,%lu,%lu.%02lu\r\n",
+                     (unsigned long)seq, (unsigned long)t_ms, cents / 100UL, cents % 100UL);
     if (n > 0 && g_uart != NULL)
         (void)HAL_UART_Transmit(g_uart, (uint8_t *)line, (uint16_t)n, 20u);
 }
