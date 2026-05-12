@@ -146,15 +146,6 @@ void loop(void)
     float p_mmhg = pressure_counts_to_mmhg(counts);
     uint32_t now = millis();
 
-    /* --- DEBUG: in counts thô + rc mỗi 200 ms để dễ đọc trên Serial monitor --- */
-    static uint32_t dbg_last = 0;
-    if (now - dbg_last >= 200u) {
-        dbg_last = now;
-        char b[48];
-        snprintf(b, sizeof(b), "D,rc=%d,counts=%d\r\n", rc, (int)counts);
-        Serial.write((const uint8_t *)b, strlen(b));
-    }
-
     bp_fsm_on_tick(now, p_mmhg, start, stop, high);
 
     BpState stt = bp_fsm_get_state();
@@ -176,7 +167,7 @@ void loop(void)
             uart_proto_send_line("A,IDLE\r\n");
     }
 
-    uart_proto_send_sample(g_seq++, now, p_mmhg);
+    uart_proto_send_sample(g_seq++, now, p_mmhg, rc, counts);
 
     apply_pwm_outputs();
     led_hmi_task(bp_fsm_led_hmi_state());

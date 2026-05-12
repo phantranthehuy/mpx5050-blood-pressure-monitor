@@ -77,18 +77,25 @@ extern "C" void uart_proto_poll_rx(void)
     }
 }
 
-extern "C" void uart_proto_send_sample(uint32_t seq, uint32_t t_ms, float p_mmhg)
+extern "C" void uart_proto_send_sample(uint32_t seq, uint32_t t_ms, float p_mmhg,
+                                       int rc, int16_t counts)
 {
-    char line[48];
+    char line[80];
     /* Tránh %f: newlib nano trên STM32 thường không link printf float → mmHg bị trống. */
     float p = p_mmhg;
-    if (p < 0.f)
-        p = 0.f;
-    else if (p > 500.f)
-        p = 500.f;
-    unsigned long cents = (unsigned long)(p * 100.f + 0.5f);
-    int n = snprintf(line, sizeof(line), "S,%lu,%lu,%lu.%02lu\r\n",
-                     (unsigned long)seq, (unsigned long)t_ms, cents / 100UL, cents % 100UL);
+    int sign = (p < 0.f) ? -1 : 1;
+    float pa = (sign < 0) ? -p : p;
+    if (pa > 500.f)
+        pa = 500.f;
+    unsigned long cents = (unsigned long)(pa * 100.f + 0.5f);
+    /* Bổ sung rc và counts ở cuối: S,<seq>,<t_ms>,<p_mmhg>,<rc>,<counts>
+     * → mỗi dòng đều thấy ADC thô, không cần ngó dòng D,... rời (đã bỏ).
+     * In luôn dấu '-' nếu p âm để biết đang bị clip vì lý do gì. */
+    int n = snprintf(line, sizeof(line), "S,%lu,%lu,%s%lu.%02lu,%d,%d\r\n",
+                     (unsigned long)seq, (unsigned long)t_ms,
+                     (sign < 0) ? "-" : "",
+                     cents / 100UL, cents % 100UL,
+                     rc, (int)counts);
     if (n > 0)
         Serial.write((const uint8_t *)line, (size_t)n);
 }
